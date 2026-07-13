@@ -1,0 +1,4 @@
+# Default options for https://github.com/nektos/act
+# Run the CI workflow locally with: act
+--container-architecture linux/amd64
+--action-offline-mode

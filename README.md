@@ -32,3 +32,13 @@ cd web && npm ci && npm run dev
 # Local CI verification
 act --container-daemon-socket /run/podman/podman.sock
 ```
+
+## Local CI with act
+
+You can run GitHub Actions workflows locally using [act](https://github.com/nektos/act):
+
+```bash
+act
+```
+
+The `.actrc` file sets `--container-architecture linux/amd64` and `--action-offline-mode` for faster local runs.
