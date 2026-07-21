@@ -1,6 +1,11 @@
 # risk
 
-> Platform description here.
+> Risk scores open-source dependencies on release trajectory, maintenance
+> signals, and documentation quality, producing green/yellow/red/critical
+> verdicts at risk.lucanian.app.
+>
+> **Status: early development.** The scoring engine is implemented; the
+> data-ingestion pipeline (deps.dev + GitHub collectors) is planned next.
 > Domain: `risk.lucanian.app`
 
 ---

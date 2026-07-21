@@ -2,13 +2,16 @@ package db
 
 import (
 	"database/sql"
+	"embed"
 	"fmt"
-	"log"
 
 	"risk.lucanian.app/api/internal/config"
 
 	_ "github.com/mattn/go-sqlite3"
 )
+
+//go:embed schema.sql
+var schemaSQL embed.FS
 
 var DB *sql.DB
 

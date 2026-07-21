@@ -11,6 +11,8 @@ CREATE TABLE IF NOT EXISTS entities (
     category TEXT,
     score_value INTEGER DEFAULT 0,
     metadata TEXT,
+    last_pushed_at TEXT,
+    open_issues INTEGER DEFAULT 0,
     scraped_at TEXT DEFAULT (datetime('now')),
     UNIQUE(platform, slug)
 );
