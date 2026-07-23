@@ -1,5 +1,6 @@
-import { defineVitestConfig } from "@nuxt/test-utils/config";
+import { defineVitestConfig } from '@nuxt/test-utils/config'
 
 export default defineVitestConfig({
-  test: { environment: "jsdom", include: ["tests/**/*.spec.ts"] },
-});
+  // Playwright e2e specs live in tests/e2e and must not run under vitest.
+  test: { environment: 'jsdom', include: ['tests/unit/**/*.spec.ts'] },
+})

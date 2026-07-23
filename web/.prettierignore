@@ -1,0 +1,12 @@
+.nuxt
+.output
+dist
+node_modules
+playwright.config.ts
+test-results
+e2e
+
+# Placeholder-bearing pages: substitution changes line lengths, so
+# formatting cannot be stable both before and after instantiation.
+pages/about.vue
+pages/[[]owner[]]/[[]name[]].vue

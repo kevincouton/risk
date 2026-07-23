@@ -1,19 +1,45 @@
 package main
 
 import (
-	"encoding/json"
+	"context"
 	"flag"
+	"fmt"
 	"log"
-	"strings"
+	"os"
 	"time"
 
+	"risk.lucanian.app/api/internal/collectors"
 	"risk.lucanian.app/api/internal/config"
 	"risk.lucanian.app/api/internal/db"
 )
 
+// The template ships no concrete collectors. Niche collectors register
+// themselves via collectors.Register from package init() (e.g. a clone's
+// api/collectors/ or an internal/ package imported here with a blank import).
 func main() {
-	platformFlag := flag.String("platform", "default", "Source platform")
+	collectorName := flag.String("collector", "", "Registered collector to run (see -list)")
+	list := flag.Bool("list", false, "List registered collectors and exit")
+	rateLimit := flag.Int("rate-limit", 60, "Source requests per minute")
+	maxRetries := flag.Int("max-retries", 3, "Fetch retries after the first attempt")
+	batchSize := flag.Int("batch-size", 100, "Entities per upsert transaction")
 	flag.Parse()
+
+	if *list {
+		for _, name := range collectors.List() {
+			fmt.Println(name)
+		}
+		return
+	}
+	if *collectorName == "" {
+		fmt.Fprintf(os.Stderr, "Usage: go run ./cmd/ingest -collector <name> [-rate-limit N] [-max-retries N] [-batch-size N]\n")
+		fmt.Fprintf(os.Stderr, "Registered collectors: %v\n", collectors.List())
+		os.Exit(2)
+	}
+
+	c, ok := collectors.Get(*collectorName)
+	if !ok {
+		log.Fatalf("unknown collector %q; registered: %v", *collectorName, collectors.List())
+	}
 
 	config.MustLoad()
 	if err := db.Init(); err != nil {
@@ -23,50 +49,16 @@ func main() {
 		log.Fatal(err)
 	}
 
-	var slugs []string
-	args := flag.Args()
-	if len(args) > 0 {
-		slugs = strings.Split(args[0], ",")
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
+
+	res, err := collectors.Run(ctx, c, db.DB, collectors.RunOptions{
+		RateLimitPerMin: *rateLimit,
+		MaxRetries:      *maxRetries,
+		BatchSize:       *batchSize,
+	})
+	if err != nil {
+		log.Fatalf("collector %s failed: %v (partial result: %+v)", *collectorName, err, res)
 	}
-
-	if len(slugs) == 0 {
-		log.Fatal("Usage: go run ./cmd/ingest [--platform=default] slug/name,slug/name")
-	}
-
-	log.Printf("Ingesting %d entities from %s...", len(slugs), *platformFlag)
-
-	for _, fullName := range slugs {
-		parts := strings.Split(strings.TrimSpace(fullName), "/")
-		if len(parts) != 2 {
-			log.Printf("Skipping invalid: %s", fullName)
-			continue
-		}
-		owner, name := parts[0], parts[1]
-
-		// TODO: Implement platform-specific ingestion
-		// For now, insert a placeholder entity
-		_, err := db.DB.Exec(`
-			INSERT INTO entities (id, platform, slug, name, full_name, description, category, score_value, metadata)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-			ON CONFLICT(platform, slug) DO UPDATE SET
-				score_value = excluded.score_value,
-				metadata = excluded.metadata,
-				scraped_at = datetime('now')
-		`, db.NewID(), *platformFlag, owner, name, fullName, "Ingested entity", "general", 0, "{}")
-
-		if err != nil {
-			log.Printf("Error inserting %s: %v", fullName, err)
-			continue
-		}
-
-		log.Printf("  ✓ %s", fullName)
-		time.Sleep(500 * time.Millisecond)
-	}
-
-	log.Println("Ingest complete")
-}
-
-func mustJSON(v interface{}) string {
-	b, _ := json.Marshal(v)
-	return string(b)
+	log.Printf("Ingest complete: %+v", res)
 }

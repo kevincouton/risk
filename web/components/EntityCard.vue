@@ -1,11 +1,13 @@
 <template>
   <div
-    class="bg-white rounded-2xl border p-5 hover:shadow-lg transition-shadow group"
+    class="bg-white rounded-2xl border p-5 hover:shadow-lg transition-shadow group dark:border-gray-800 dark:bg-gray-900"
     @click="onClick"
   >
     <NuxtLink :to="`/${entity.full_name}`" class="block">
       <div class="flex items-start justify-between mb-3">
-        <h3 class="font-semibold text-lg leading-tight group-hover:text-blue-700 transition-colors">
+        <h3
+          class="font-semibold text-lg leading-tight group-hover:text-blue-700 transition-colors dark:text-gray-100"
+        >
           {{ entity.full_name }}
         </h3>
         <span
@@ -15,12 +17,19 @@
           {{ entity.verdict }}
         </span>
       </div>
-      <p class="text-gray-500 text-sm line-clamp-2 leading-relaxed">{{ entity.description }}</p>
+      <p class="text-gray-500 text-sm line-clamp-2 leading-relaxed dark:text-gray-400">
+        {{ entity.description }}
+      </p>
       <div class="flex items-center gap-3 mt-4 text-xs text-gray-400">
-        <span v-if="entity.category" class="bg-gray-100 px-2.5 py-1 rounded-lg font-medium text-gray-600">
+        <span
+          v-if="entity.category"
+          class="bg-gray-100 px-2.5 py-1 rounded-lg font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300"
+        >
           {{ entity.category }}
         </span>
-        <span class="font-mono font-semibold text-gray-700">{{ entity.composite_score }}/100</span>
+        <span class="font-mono font-semibold text-gray-700 dark:text-gray-300"
+          >{{ entity.composite_score }}/100</span
+        >
       </div>
     </NuxtLink>
   </div>

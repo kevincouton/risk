@@ -14,7 +14,11 @@ export const useAnalytics = () => {
     }
   }
 
-  const trackEntityClick = (entity: { full_name: string; composite_score: number; verdict: string }) => {
+  const trackEntityClick = (entity: {
+    full_name: string
+    composite_score: number
+    verdict: string
+  }) => {
     track('entity_click', {
       entity: entity.full_name,
       score: entity.composite_score,

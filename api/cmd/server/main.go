@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -9,6 +10,9 @@ import (
 	"time"
 
 	"risk.lucanian.app/api/internal/analytics"
+	"risk.lucanian.app/api/internal/apikeys"
+	"risk.lucanian.app/api/internal/auth"
+	"risk.lucanian.app/api/internal/billing"
 	"risk.lucanian.app/api/internal/config"
 	"risk.lucanian.app/api/internal/db"
 )
@@ -35,12 +39,130 @@ func main() {
 	}
 	analytics.Init()
 
+	// Auth is opt-in and fail-closed: any misconfiguration disables auth
+	// entirely while read-only endpoints keep serving (spec §5.2).
+	var authProvider *auth.Provider
+	if config.AuthEnabled {
+		if len(config.SessionSigningKey) < 32 {
+			log.Printf("auth: SESSION_SIGNING_KEY must be at least 32 bytes, auth disabled")
+		} else {
+			var err error
+			authProvider, err = auth.NewProvider(context.Background(), auth.OIDCConfig{
+				IssuerURL:    config.OIDCIssuer,
+				ClientID:     config.OIDCClientID,
+				ClientSecret: config.OIDCClientSecret,
+				RedirectURL:  config.AppURL + "/auth/callback",
+			}, []byte(config.SessionSigningKey), db.DB)
+			if err != nil {
+				log.Printf("auth: OIDC discovery failed, auth disabled: %v", err)
+				authProvider = nil
+			}
+		}
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", handleHealth)
-	mux.HandleFunc("/api/v1/entities", handleEntities)
-	mux.HandleFunc("/api/v1/entities/", handleEntityDetail)
-	mux.HandleFunc("/api/v1/search", handleSearch)
-	mux.HandleFunc("/api/v1/stats", handleStats)
+
+	// API-key metering is opt-in and fail-closed: /api/v1/* is gated behind
+	// X-API-Key only when API_KEYS_ENABLED=true (spec §5.2).
+	if config.APIKeysEnabled {
+		wrapV1 := func(h http.HandlerFunc) http.Handler {
+			return apikeys.KeyAuth(db.DB)(apikeys.RateLimit(db.DB, 60)(h))
+		}
+		mux.Handle("/api/v1/entities", wrapV1(handleEntities))
+		mux.Handle("/api/v1/entities/", wrapV1(handleEntityDetail))
+		mux.Handle("/api/v1/search", wrapV1(handleSearch))
+		mux.Handle("/api/v1/stats", wrapV1(handleStats))
+	} else {
+		mux.HandleFunc("/api/v1/entities", handleEntities)
+		mux.HandleFunc("/api/v1/entities/", handleEntityDetail)
+		mux.HandleFunc("/api/v1/search", handleSearch)
+		mux.HandleFunc("/api/v1/stats", handleStats)
+	}
+
+	if authProvider != nil {
+		mux.HandleFunc("/auth/login", authProvider.HandleLogin)
+		mux.HandleFunc("/auth/callback", authProvider.HandleCallback)
+		mux.HandleFunc("/auth/logout", authProvider.HandleLogout)
+		mux.HandleFunc("/auth/me", authProvider.HandleMe)
+	}
+
+	// Billing is opt-in and fail-closed: no billing routes exist unless
+	// BILLING_ENABLED=true (spec §5.2).
+	if config.BillingEnabled {
+		billing.SetSecretKey(config.StripeSecretKey)
+		billing.SetCheckoutURLs(config.AppURL+"/premium?status=success", config.AppURL+"/premium?status=canceled")
+		webhook := billing.NewWebhookHandler(db.DB, config.StripeWebhookSecret)
+		mux.Handle("/api/billing/webhook", webhook)
+		checkout := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			userID := r.URL.Query().Get("user_id")
+			if authProvider != nil {
+				if u := authProvider.CurrentUser(r); u != nil {
+					userID = u.ID
+				}
+			}
+			if userID == "" {
+				http.Error(w, `{"error":"authentication required"}`, http.StatusUnauthorized)
+				return
+			}
+			url, err := billing.CreateCheckoutSession(r.Context(), userID, config.StripePriceID)
+			if err != nil {
+				http.Error(w, `{"error":"checkout failed"}`, http.StatusBadGateway)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"url":"` + url + `"}`))
+		})
+		if authProvider != nil {
+			mux.Handle("/api/billing/checkout", authProvider.RequireAuth(checkout))
+		} else {
+			mux.Handle("/api/billing/checkout", checkout)
+		}
+	}
+
+	// Key management endpoints require both API_KEYS_ENABLED and auth.
+	if config.APIKeysEnabled && authProvider != nil {
+		mux.Handle("/api/keys", authProvider.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			u := authProvider.CurrentUser(r)
+			w.Header().Set("Content-Type", "application/json")
+			switch r.Method {
+			case http.MethodGet:
+				keys, err := apikeys.ListKeys(r.Context(), db.DB, u.ID)
+				if err != nil {
+					http.Error(w, `{"error":"list failed"}`, http.StatusInternalServerError)
+					return
+				}
+				json.NewEncoder(w).Encode(map[string]interface{}{"keys": keys})
+			case http.MethodPost:
+				var req struct {
+					Label string `json:"label"`
+				}
+				_ = json.NewDecoder(r.Body).Decode(&req)
+				plaintext, err := apikeys.CreateKey(r.Context(), db.DB, u.ID, req.Label)
+				if err != nil {
+					http.Error(w, `{"error":"create failed"}`, http.StatusInternalServerError)
+					return
+				}
+				json.NewEncoder(w).Encode(map[string]string{"key": plaintext})
+			default:
+				http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+			}
+		})))
+		mux.Handle("/api/keys/", authProvider.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodDelete {
+				http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+				return
+			}
+			u := authProvider.CurrentUser(r)
+			keyID := strings.TrimPrefix(r.URL.Path, "/api/keys/")
+			if err := apikeys.RevokeKey(r.Context(), db.DB, keyID, u.ID); err != nil {
+				http.Error(w, `{"error":"revoke failed"}`, http.StatusNotFound)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"ok":true}`))
+		})))
+	}
 
 	fs := http.FileServer(http.Dir("./web/dist"))
 	mux.Handle("/", fs)

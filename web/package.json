@@ -20,6 +20,7 @@
     "@nuxtjs/tailwindcss": "^6.14.0",
     "d3": "^7.9.0",
     "nuxt": "^4.4.7",
+    "ofetch": "1.5.1",
     "posthog-js": "^1.382.0",
     "tailwindcss": "^3.4.19",
     "typescript": "^6.0.3",
@@ -37,7 +38,7 @@
     "vite-plus": "^0.1.24"
   },
   "overrides": {
-    "vite": "npm:@voidzero-dev/vite-plus-core@latest",
-    "vitest": "npm:@voidzero-dev/vite-plus-test@latest"
+    "vite": "npm:@voidzero-dev/vite-plus-core@0.1.24",
+    "vitest": "npm:@voidzero-dev/vite-plus-test@0.1.24"
   }
 }

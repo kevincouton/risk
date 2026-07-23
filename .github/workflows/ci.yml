@@ -11,7 +11,7 @@ env:
   NODE_VERSION: '22'
 
 jobs:
-  api-build:
+  api:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -24,73 +24,50 @@ jobs:
       - run: go mod tidy
       - run: go build ./...
       - run: go vet ./...
+      - run: go test -race ./...
 
-  api-test:
+  web:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./api
+        working-directory: ./web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npx vp check
+      - run: npm test
+      - run: npm run build
+
+  deploy:
+    needs: [api, web]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && vars.DEPLOY_ENABLED == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-      - run: go mod tidy
-      - run: go test -v -race -coverprofile=coverage.out ./...
-      - run: go tool cover -func=coverage.out | tail -1
-
-  web-check:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./web
-    steps:
-      - uses: actions/checkout@v4
-      - uses: voidzero-dev/setup-vp@v1
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: true
-          run-install: false
-      - run: npm ci
-      - run: vp check
-
-  web-test:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./web
-    steps:
-      - uses: actions/checkout@v4
-      - uses: voidzero-dev/setup-vp@v1
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: true
-          run-install: false
-      - run: npm ci
-      - run: vp test
-
-  web-build:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./web
-    steps:
-      - uses: actions/checkout@v4
-      - uses: voidzero-dev/setup-vp@v1
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: true
-          run-install: false
-      - run: npm ci
-      - run: npm run build
-
-  deploy:
-    needs: [api-build, api-test, web-check, web-test, web-build]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Deploy to production
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Deploy
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          DEPLOY_DOMAIN: ${{ secrets.DEPLOY_DOMAIN }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
         run: |
-          echo "Deployment would trigger here"
-          echo "Current strategy: systemd + Caddy on VPS"
+          echo "$DEPLOY_SSH_KEY" > deploy_key
+          chmod 600 deploy_key
+          api/deploy/deploy.sh "risk"
+      - name: Clean up deploy key
+        if: always()
+        run: rm -f deploy_key
