@@ -65,11 +65,7 @@
     </main>
 
     <div class="max-w-6xl mx-auto px-4 mb-8">
-      <AdPlaceholder
-        slot-id="risk-footer-leaderboard"
-        format="leaderboard"
-        label="Sponsored"
-      />
+      <AdPlaceholder slot-id="risk-footer-leaderboard" format="leaderboard" label="Sponsored" />
     </div>
 
     <footer class="border-t bg-white mt-12 dark:border-gray-800 dark:bg-gray-900">
