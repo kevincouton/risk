@@ -1,0 +1,8 @@
+{
+  "name": "entity_detail_invalid_path",
+  "method": "GET",
+  "path": "/api/v1/entities/solo",
+  "headers": {},
+  "body": null,
+  "expect": { "status": 400, "text": "invalid path\n" }
+}

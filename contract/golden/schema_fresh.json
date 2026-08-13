@@ -1,0 +1,905 @@
+{
+  "tables": {
+    "api_keys": {
+      "index_list": [
+        {
+          "name": "sqlite_autoindex_api_keys_2",
+          "origin": "u",
+          "partial": 0,
+          "seq": 0,
+          "unique": 1
+        },
+        {
+          "name": "sqlite_autoindex_api_keys_1",
+          "origin": "pk",
+          "partial": 0,
+          "seq": 1,
+          "unique": 1
+        }
+      ],
+      "index_sql": {},
+      "sql": "CREATE TABLE api_keys (\n    id TEXT PRIMARY KEY,\n    user_id TEXT NOT NULL,\n    key_hash TEXT UNIQUE NOT NULL,\n    label TEXT,\n    created_at TEXT DEFAULT (datetime('now')),\n    revoked_at TEXT\n)",
+      "table_info": [
+        {
+          "cid": 0,
+          "dflt_value": null,
+          "name": "id",
+          "notnull": 0,
+          "pk": 1,
+          "type": "TEXT"
+        },
+        {
+          "cid": 1,
+          "dflt_value": null,
+          "name": "user_id",
+          "notnull": 1,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "cid": 2,
+          "dflt_value": null,
+          "name": "key_hash",
+          "notnull": 1,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "cid": 3,
+          "dflt_value": null,
+          "name": "label",
+          "notnull": 0,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "cid": 4,
+          "dflt_value": "datetime('now')",
+          "name": "created_at",
+          "notnull": 0,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "cid": 5,
+          "dflt_value": null,
+          "name": "revoked_at",
+          "notnull": 0,
+          "pk": 0,
+          "type": "TEXT"
+        }
+      ]
+    },
+    "api_usage": {
+      "index_list": [
+        {
+          "name": "idx_api_usage_key_ts",
+          "origin": "c",
+          "partial": 0,
+          "seq": 0,
+          "unique": 0
+        },
+        {
+          "name": "sqlite_autoindex_api_usage_1",
+          "origin": "pk",
+          "partial": 0,
+          "seq": 1,
+          "unique": 1
+        }
+      ],
+      "index_sql": {
+        "idx_api_usage_key_ts": "CREATE INDEX idx_api_usage_key_ts ON api_usage(key_id, ts)"
+      },
+      "sql": "CREATE TABLE api_usage (\n    id TEXT PRIMARY KEY,\n    key_id TEXT NOT NULL REFERENCES api_keys(id),\n    ts TEXT NOT NULL DEFAULT (datetime('now')),\n    endpoint TEXT\n)",
+      "table_info": [
+        {
+          "cid": 0,
+          "dflt_value": null,
+          "name": "id",
+          "notnull": 0,
+          "pk": 1,
+          "type": "TEXT"
+        },
+        {
+          "cid": 1,
+          "dflt_value": null,
+          "name": "key_id",
+          "notnull": 1,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "cid": 2,
+          "dflt_value": "datetime('now')",
+          "name": "ts",
+          "notnull": 1,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "cid": 3,
+          "dflt_value": null,
+          "name": "endpoint",
+          "notnull": 0,
+          "pk": 0,
+          "type": "TEXT"
+        }
+      ]
+    },
+    "collector_runs": {
+      "index_list": [
+        {
+          "name": "idx_collector_runs_collector",
+          "origin": "c",
+          "partial": 0,
+          "seq": 0,
+          "unique": 0
+        },
+        {
+          "name": "sqlite_autoindex_collector_runs_1",
+          "origin": "pk",
+          "partial": 0,
+          "seq": 1,
+          "unique": 1
+        }
+      ],
+      "index_sql": {
+        "idx_collector_runs_collector": "CREATE INDEX idx_collector_runs_collector ON collector_runs(collector, started_at DESC)"
+      },
+      "sql": "CREATE TABLE collector_runs (\n    id TEXT PRIMARY KEY,\n    collector TEXT NOT NULL,\n    started_at TEXT NOT NULL,\n    finished_at TEXT,\n    fetched INTEGER DEFAULT 0,\n    upserted INTEGER DEFAULT 0,\n    error TEXT\n)",
+      "table_info": [
+        {
+          "cid": 0,
+          "dflt_value": null,
+          "name": "id",
+          "notnull": 0,
+          "pk": 1,
+          "type": "TEXT"
+        },
+        {
+          "cid": 1,
+          "dflt_value": null,
+          "name": "collector",
+          "notnull": 1,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "cid": 2,
+          "dflt_value": null,
+          "name": "started_at",
+          "notnull": 1,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "cid": 3,
+          "dflt_value": null,
+          "name": "finished_at",
+          "notnull": 0,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "cid": 4,
+          "dflt_value": "0",
+          "name": "fetched",
+          "notnull": 0,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "cid": 5,
+          "dflt_value": "0",
+          "name": "upserted",
+          "notnull": 0,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "cid": 6,
+          "dflt_value": null,
+          "name": "error",
+          "notnull": 0,
+          "pk": 0,
+          "type": "TEXT"
+        }
+      ]
+    },
+    "entities": {
+      "index_list": [
+        {
+          "name": "ux_entities_platform_full_name",
+          "origin": "c",
+          "partial": 0,
+          "seq": 0,
+          "unique": 1
+        },
+        {
+          "name": "idx_entities_score",
+          "origin": "c",
+          "partial": 0,
+          "seq": 1,
+          "unique": 0
+        },
+        {
+          "name": "idx_entities_category",
+          "origin": "c",
+          "partial": 0,
+          "seq": 2,
+          "unique": 0
+        },
+        {
+          "name": "idx_entities_full_name",
+          "origin": "c",
+          "partial": 0,
+          "seq": 3,
+          "unique": 0
+        },
+        {
+          "name": "sqlite_autoindex_entities_2",
+          "origin": "u",
+          "partial": 0,
+          "seq": 4,
+          "unique": 1
+        },
+        {
+          "name": "sqlite_autoindex_entities_1",
+          "origin": "pk",
+          "partial": 0,
+          "seq": 5,
+          "unique": 1
+        }
+      ],
+      "index_sql": {
+        "idx_entities_category": "CREATE INDEX idx_entities_category ON entities(category)",
+        "idx_entities_full_name": "CREATE INDEX idx_entities_full_name ON entities(full_name)",
+        "idx_entities_score": "CREATE INDEX idx_entities_score ON entities(score_value DESC)",
+        "ux_entities_platform_full_name": "CREATE UNIQUE INDEX ux_entities_platform_full_name ON entities(platform, full_name)"
+      },
+      "sql": "CREATE TABLE entities (\n    id TEXT PRIMARY KEY,\n    platform TEXT NOT NULL DEFAULT 'default',\n    slug TEXT NOT NULL,\n    name TEXT NOT NULL,\n    full_name TEXT NOT NULL,\n    description TEXT,\n    category TEXT,\n    score_value INTEGER DEFAULT 0,\n    metadata TEXT,\n    last_pushed_at TEXT,\n    open_issues INTEGER DEFAULT 0,\n    scraped_at TEXT DEFAULT (datetime('now')),\n    UNIQUE(platform, full_name)\n)",
+      "table_info": [
+        {
+          "cid": 0,
+          "dflt_value": null,
+          "name": "id",
+          "notnull": 0,
+          "pk": 1,
+          "type": "TEXT"
+        },
+        {
+          "cid": 1,
+          "dflt_value": "'default'",
+          "name": "platform",
+          "notnull": 1,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "cid": 2,
+          "dflt_value": null,
+          "name": "slug",
+          "notnull": 1,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "cid": 3,
+          "dflt_value": null,
+          "name": "name",
+          "notnull": 1,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "cid": 4,
+          "dflt_value": null,
+          "name": "full_name",
+          "notnull": 1,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "cid": 5,
+          "dflt_value": null,
+          "name": "description",
+          "notnull": 0,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "cid": 6,
+          "dflt_value": null,
+          "name": "category",
+          "notnull": 0,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "cid": 7,
+          "dflt_value": "0",
+          "name": "score_value",
+          "notnull": 0,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "cid": 8,
+          "dflt_value": null,
+          "name": "metadata",
+          "notnull": 0,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "cid": 9,
+          "dflt_value": null,
+          "name": "last_pushed_at",
+          "notnull": 0,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "cid": 10,
+          "dflt_value": "0",
+          "name": "open_issues",
+          "notnull": 0,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "cid": 11,
+          "dflt_value": "datetime('now')",
+          "name": "scraped_at",
+          "notnull": 0,
+          "pk": 0,
+          "type": "TEXT"
+        }
+      ]
+    },
+    "entity_scores": {
+      "index_list": [
+        {
+          "name": "idx_entity_scores_composite",
+          "origin": "c",
+          "partial": 0,
+          "seq": 0,
+          "unique": 0
+        },
+        {
+          "name": "idx_entity_scores_entity_id",
+          "origin": "c",
+          "partial": 0,
+          "seq": 1,
+          "unique": 0
+        },
+        {
+          "name": "sqlite_autoindex_entity_scores_1",
+          "origin": "pk",
+          "partial": 0,
+          "seq": 2,
+          "unique": 1
+        }
+      ],
+      "index_sql": {
+        "idx_entity_scores_composite": "CREATE INDEX idx_entity_scores_composite ON entity_scores(composite_score DESC)",
+        "idx_entity_scores_entity_id": "CREATE INDEX idx_entity_scores_entity_id ON entity_scores(entity_id)"
+      },
+      "sql": "CREATE TABLE entity_scores (\n    id TEXT PRIMARY KEY,\n    entity_id TEXT NOT NULL REFERENCES entities(id) ON DELETE CASCADE,\n    scored_at TEXT DEFAULT (datetime('now')),\n    trajectory_score REAL,\n    doc_score INTEGER CHECK (doc_score BETWEEN 0 AND 100),\n    popularity_score REAL,\n    composite_score INTEGER CHECK (composite_score BETWEEN 0 AND 100),\n    verdict TEXT DEFAULT 'unknown',\n    trajectory TEXT DEFAULT 'unknown',\n    calculation_version INTEGER DEFAULT 1,\n    raw_signals TEXT,\n    release_velocity_days INTEGER\n)",
+      "table_info": [
+        {
+          "cid": 0,
+          "dflt_value": null,
+          "name": "id",
+          "notnull": 0,
+          "pk": 1,
+          "type": "TEXT"
+        },
+        {
+          "cid": 1,
+          "dflt_value": null,
+          "name": "entity_id",
+          "notnull": 1,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "cid": 2,
+          "dflt_value": "datetime('now')",
+          "name": "scored_at",
+          "notnull": 0,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "cid": 3,
+          "dflt_value": null,
+          "name": "trajectory_score",
+          "notnull": 0,
+          "pk": 0,
+          "type": "REAL"
+        },
+        {
+          "cid": 4,
+          "dflt_value": null,
+          "name": "doc_score",
+          "notnull": 0,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "cid": 5,
+          "dflt_value": null,
+          "name": "popularity_score",
+          "notnull": 0,
+          "pk": 0,
+          "type": "REAL"
+        },
+        {
+          "cid": 6,
+          "dflt_value": null,
+          "name": "composite_score",
+          "notnull": 0,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "cid": 7,
+          "dflt_value": "'unknown'",
+          "name": "verdict",
+          "notnull": 0,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "cid": 8,
+          "dflt_value": "'unknown'",
+          "name": "trajectory",
+          "notnull": 0,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "cid": 9,
+          "dflt_value": "1",
+          "name": "calculation_version",
+          "notnull": 0,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "cid": 10,
+          "dflt_value": null,
+          "name": "raw_signals",
+          "notnull": 0,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "cid": 11,
+          "dflt_value": null,
+          "name": "release_velocity_days",
+          "notnull": 0,
+          "pk": 0,
+          "type": "INTEGER"
+        }
+      ]
+    },
+    "entity_taxonomy": {
+      "index_list": [
+        {
+          "name": "sqlite_autoindex_entity_taxonomy_1",
+          "origin": "pk",
+          "partial": 0,
+          "seq": 0,
+          "unique": 1
+        }
+      ],
+      "index_sql": {},
+      "sql": "CREATE TABLE entity_taxonomy (\n    entity_id TEXT NOT NULL REFERENCES entities(id) ON DELETE CASCADE,\n    taxonomy_id TEXT NOT NULL REFERENCES taxonomy(id) ON DELETE CASCADE,\n    confidence REAL DEFAULT 1.0,\n    classified_by TEXT DEFAULT 'manual',\n    PRIMARY KEY (entity_id, taxonomy_id)\n)",
+      "table_info": [
+        {
+          "cid": 0,
+          "dflt_value": null,
+          "name": "entity_id",
+          "notnull": 1,
+          "pk": 1,
+          "type": "TEXT"
+        },
+        {
+          "cid": 1,
+          "dflt_value": null,
+          "name": "taxonomy_id",
+          "notnull": 1,
+          "pk": 2,
+          "type": "TEXT"
+        },
+        {
+          "cid": 2,
+          "dflt_value": "1.0",
+          "name": "confidence",
+          "notnull": 0,
+          "pk": 0,
+          "type": "REAL"
+        },
+        {
+          "cid": 3,
+          "dflt_value": "'manual'",
+          "name": "classified_by",
+          "notnull": 0,
+          "pk": 0,
+          "type": "TEXT"
+        }
+      ]
+    },
+    "releases": {
+      "index_list": [
+        {
+          "name": "sqlite_autoindex_releases_1",
+          "origin": "pk",
+          "partial": 0,
+          "seq": 0,
+          "unique": 1
+        }
+      ],
+      "index_sql": {},
+      "sql": "CREATE TABLE releases (\n    id TEXT PRIMARY KEY,\n    entity_id TEXT NOT NULL REFERENCES entities(id) ON DELETE CASCADE,\n    tag_name TEXT NOT NULL,\n    name TEXT,\n    body TEXT,\n    is_prerelease INTEGER DEFAULT 0,\n    published_at TEXT,\n    raw_metadata TEXT\n)",
+      "table_info": [
+        {
+          "cid": 0,
+          "dflt_value": null,
+          "name": "id",
+          "notnull": 0,
+          "pk": 1,
+          "type": "TEXT"
+        },
+        {
+          "cid": 1,
+          "dflt_value": null,
+          "name": "entity_id",
+          "notnull": 1,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "cid": 2,
+          "dflt_value": null,
+          "name": "tag_name",
+          "notnull": 1,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "cid": 3,
+          "dflt_value": null,
+          "name": "name",
+          "notnull": 0,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "cid": 4,
+          "dflt_value": null,
+          "name": "body",
+          "notnull": 0,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "cid": 5,
+          "dflt_value": "0",
+          "name": "is_prerelease",
+          "notnull": 0,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "cid": 6,
+          "dflt_value": null,
+          "name": "published_at",
+          "notnull": 0,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "cid": 7,
+          "dflt_value": null,
+          "name": "raw_metadata",
+          "notnull": 0,
+          "pk": 0,
+          "type": "TEXT"
+        }
+      ]
+    },
+    "star_history": {
+      "index_list": [
+        {
+          "name": "sqlite_autoindex_star_history_1",
+          "origin": "pk",
+          "partial": 0,
+          "seq": 0,
+          "unique": 1
+        }
+      ],
+      "index_sql": {},
+      "sql": "CREATE TABLE star_history (\n    entity_id TEXT NOT NULL REFERENCES entities(id) ON DELETE CASCADE,\n    recorded_at TEXT NOT NULL,\n    stars INTEGER NOT NULL,\n    stars_gained INTEGER DEFAULT 0,\n    PRIMARY KEY (entity_id, recorded_at)\n)",
+      "table_info": [
+        {
+          "cid": 0,
+          "dflt_value": null,
+          "name": "entity_id",
+          "notnull": 1,
+          "pk": 1,
+          "type": "TEXT"
+        },
+        {
+          "cid": 1,
+          "dflt_value": null,
+          "name": "recorded_at",
+          "notnull": 1,
+          "pk": 2,
+          "type": "TEXT"
+        },
+        {
+          "cid": 2,
+          "dflt_value": null,
+          "name": "stars",
+          "notnull": 1,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "cid": 3,
+          "dflt_value": "0",
+          "name": "stars_gained",
+          "notnull": 0,
+          "pk": 0,
+          "type": "INTEGER"
+        }
+      ]
+    },
+    "subscriptions": {
+      "index_list": [
+        {
+          "name": "idx_subscriptions_customer",
+          "origin": "c",
+          "partial": 0,
+          "seq": 0,
+          "unique": 0
+        },
+        {
+          "name": "sqlite_autoindex_subscriptions_2",
+          "origin": "u",
+          "partial": 0,
+          "seq": 1,
+          "unique": 1
+        },
+        {
+          "name": "sqlite_autoindex_subscriptions_1",
+          "origin": "pk",
+          "partial": 0,
+          "seq": 2,
+          "unique": 1
+        }
+      ],
+      "index_sql": {
+        "idx_subscriptions_customer": "CREATE INDEX idx_subscriptions_customer ON subscriptions(stripe_customer_id)"
+      },
+      "sql": "CREATE TABLE subscriptions (\n    id TEXT PRIMARY KEY,\n    user_id TEXT NOT NULL REFERENCES users(id),\n    stripe_customer_id TEXT NOT NULL,\n    stripe_subscription_id TEXT UNIQUE,\n    status TEXT DEFAULT 'active',\n    current_period_end TEXT\n)",
+      "table_info": [
+        {
+          "cid": 0,
+          "dflt_value": null,
+          "name": "id",
+          "notnull": 0,
+          "pk": 1,
+          "type": "TEXT"
+        },
+        {
+          "cid": 1,
+          "dflt_value": null,
+          "name": "user_id",
+          "notnull": 1,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "cid": 2,
+          "dflt_value": null,
+          "name": "stripe_customer_id",
+          "notnull": 1,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "cid": 3,
+          "dflt_value": null,
+          "name": "stripe_subscription_id",
+          "notnull": 0,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "cid": 4,
+          "dflt_value": "'active'",
+          "name": "status",
+          "notnull": 0,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "cid": 5,
+          "dflt_value": null,
+          "name": "current_period_end",
+          "notnull": 0,
+          "pk": 0,
+          "type": "TEXT"
+        }
+      ]
+    },
+    "taxonomy": {
+      "index_list": [
+        {
+          "name": "sqlite_autoindex_taxonomy_2",
+          "origin": "u",
+          "partial": 0,
+          "seq": 0,
+          "unique": 1
+        },
+        {
+          "name": "sqlite_autoindex_taxonomy_1",
+          "origin": "pk",
+          "partial": 0,
+          "seq": 1,
+          "unique": 1
+        }
+      ],
+      "index_sql": {},
+      "sql": "CREATE TABLE taxonomy (\n    id TEXT PRIMARY KEY,\n    domain TEXT NOT NULL,\n    subdomain TEXT,\n    niche TEXT,\n    full_path TEXT NOT NULL,\n    description TEXT,\n    parent_id TEXT REFERENCES taxonomy(id),\n    UNIQUE(full_path)\n)",
+      "table_info": [
+        {
+          "cid": 0,
+          "dflt_value": null,
+          "name": "id",
+          "notnull": 0,
+          "pk": 1,
+          "type": "TEXT"
+        },
+        {
+          "cid": 1,
+          "dflt_value": null,
+          "name": "domain",
+          "notnull": 1,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "cid": 2,
+          "dflt_value": null,
+          "name": "subdomain",
+          "notnull": 0,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "cid": 3,
+          "dflt_value": null,
+          "name": "niche",
+          "notnull": 0,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "cid": 4,
+          "dflt_value": null,
+          "name": "full_path",
+          "notnull": 1,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "cid": 5,
+          "dflt_value": null,
+          "name": "description",
+          "notnull": 0,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "cid": 6,
+          "dflt_value": null,
+          "name": "parent_id",
+          "notnull": 0,
+          "pk": 0,
+          "type": "TEXT"
+        }
+      ]
+    },
+    "users": {
+      "index_list": [
+        {
+          "name": "sqlite_autoindex_users_2",
+          "origin": "u",
+          "partial": 0,
+          "seq": 0,
+          "unique": 1
+        },
+        {
+          "name": "sqlite_autoindex_users_1",
+          "origin": "pk",
+          "partial": 0,
+          "seq": 1,
+          "unique": 1
+        }
+      ],
+      "index_sql": {},
+      "sql": "CREATE TABLE users (\n    id TEXT PRIMARY KEY,\n    oidc_sub TEXT UNIQUE NOT NULL,\n    email TEXT,\n    display_name TEXT,\n    groups TEXT DEFAULT '[]',\n    premium INTEGER DEFAULT 0,\n    created_at TEXT DEFAULT (datetime('now')),\n    last_login_at TEXT\n)",
+      "table_info": [
+        {
+          "cid": 0,
+          "dflt_value": null,
+          "name": "id",
+          "notnull": 0,
+          "pk": 1,
+          "type": "TEXT"
+        },
+        {
+          "cid": 1,
+          "dflt_value": null,
+          "name": "oidc_sub",
+          "notnull": 1,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "cid": 2,
+          "dflt_value": null,
+          "name": "email",
+          "notnull": 0,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "cid": 3,
+          "dflt_value": null,
+          "name": "display_name",
+          "notnull": 0,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "cid": 4,
+          "dflt_value": "'[]'",
+          "name": "groups",
+          "notnull": 0,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "cid": 5,
+          "dflt_value": "0",
+          "name": "premium",
+          "notnull": 0,
+          "pk": 0,
+          "type": "INTEGER"
+        },
+        {
+          "cid": 6,
+          "dflt_value": "datetime('now')",
+          "name": "created_at",
+          "notnull": 0,
+          "pk": 0,
+          "type": "TEXT"
+        },
+        {
+          "cid": 7,
+          "dflt_value": null,
+          "name": "last_login_at",
+          "notnull": 0,
+          "pk": 0,
+          "type": "TEXT"
+        }
+      ]
+    }
+  }
+}

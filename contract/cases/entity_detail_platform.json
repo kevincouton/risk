@@ -1,0 +1,14 @@
+{
+  "name": "entity_detail_platform",
+  "method": "GET",
+  "path": "/api/v1/entities/acme/gamma?platform=gitlab",
+  "headers": {},
+  "body": null,
+  "expect": {
+    "status": 200,
+    "json": {
+      "entity": { "id": "e-gamma", "platform": "gitlab", "full_name": "acme/gamma", "description": "Gamma CLI", "category": "tools", "score_value": 80 },
+      "raw_metadata": { "stars": 75 }
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "rate_limit_61",
+  "method": "GET",
+  "path": "/api/v1/stats",
+  "headers": { "X-API-Key": "pk_contract_test_key_0001" },
+  "body": null,
+  "env": { "API_KEYS_ENABLED": "true" },
+  "isolate": true,
+  "slow": true,
+  "repeat": 61,
+  "expect": { "status": 429, "text": "{\"error\":\"rate limit exceeded\"}\n" }
+}

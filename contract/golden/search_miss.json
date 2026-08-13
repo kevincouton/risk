@@ -1,0 +1,14 @@
+{
+  "body": {
+    "entities": null,
+    "query": "zzzzz",
+    "total": 0
+  },
+  "headers": {
+    "access-control-allow-headers": "Content-Type",
+    "access-control-allow-methods": "GET, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-type": "application/json"
+  },
+  "status": 200
+}

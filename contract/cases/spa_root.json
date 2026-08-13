@@ -1,0 +1,8 @@
+{
+  "name": "spa_root",
+  "method": "GET",
+  "path": "/",
+  "headers": {},
+  "body": null,
+  "expect": { "status": 200, "text": "<!doctype html><html><head><title>contract</title></head><body>contract spa</body></html>\n" }
+}

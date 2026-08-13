@@ -1,0 +1,17 @@
+{
+  "name": "entities_limit1",
+  "method": "GET",
+  "path": "/api/v1/entities?limit=1",
+  "headers": {},
+  "body": null,
+  "expect": {
+    "status": 200,
+    "json": {
+      "entities": [
+        { "id": "e-alpha", "platform": "default", "full_name": "acme/alpha", "description": "Alpha toolkit", "category": "tools", "score_value": 90, "verdict": "strong", "trajectory": "rising", "composite_score": 88 }
+      ],
+      "limit": 1,
+      "total": 1
+    }
+  }
+}

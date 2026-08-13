@@ -1,0 +1,11 @@
+{
+  "name": "entities_limit999",
+  "method": "GET",
+  "path": "/api/v1/entities?limit=999",
+  "headers": {},
+  "body": null,
+  "expect": {
+    "status": 200,
+    "json_subset": { "limit": 50, "total": 3 }
+  }
+}

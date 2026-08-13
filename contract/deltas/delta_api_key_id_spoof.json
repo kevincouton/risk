@@ -1,0 +1,11 @@
+{
+  "name": "delta_api_key_id_spoof",
+  "method": "GET",
+  "path": "/api/v1/stats",
+  "headers": { "X-API-Key": "pk_contract_test_key_0001", "X-API-Key-ID": "k-exhausted" },
+  "body": null,
+  "env": { "API_KEYS_ENABLED": "true" },
+  "go_status": 200,
+  "rust_status": 200,
+  "expect": { "headers": { "x-ratelimit-remaining": "59" } }
+}

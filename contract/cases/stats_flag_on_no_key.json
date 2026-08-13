@@ -1,0 +1,9 @@
+{
+  "name": "stats_flag_on_no_key",
+  "method": "GET",
+  "path": "/api/v1/stats",
+  "headers": {},
+  "body": null,
+  "env": { "API_KEYS_ENABLED": "true" },
+  "expect": { "status": 401, "text": "{\"error\":\"invalid or missing API key\"}\n" }
+}

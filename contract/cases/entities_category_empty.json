@@ -1,0 +1,8 @@
+{
+  "name": "entities_category_empty",
+  "method": "GET",
+  "path": "/api/v1/entities?category=nosuch",
+  "headers": {},
+  "body": null,
+  "expect": { "status": 200, "json": { "entities": null, "limit": 50, "total": 0 } }
+}

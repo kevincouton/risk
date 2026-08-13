@@ -1,0 +1,11 @@
+{
+  "body": {
+    "ok": true
+  },
+  "headers": {
+    "access-control-allow-headers": "Content-Type, X-API-Key",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "content-type": "application/json"
+  },
+  "status": 200
+}

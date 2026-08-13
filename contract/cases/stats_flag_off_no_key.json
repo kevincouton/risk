@@ -1,0 +1,11 @@
+{
+  "name": "stats_flag_off_no_key",
+  "method": "GET",
+  "path": "/api/v1/stats",
+  "headers": {},
+  "body": null,
+  "expect": {
+    "status": 200,
+    "json": { "total_entities": 3, "total_scores": 2, "verdicts": { "fair": 1, "strong": 1 } }
+  }
+}

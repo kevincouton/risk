@@ -1,0 +1,14 @@
+{
+  "name": "entity_detail",
+  "method": "GET",
+  "path": "/api/v1/entities/acme/alpha",
+  "headers": {},
+  "body": null,
+  "expect": {
+    "status": 200,
+    "json": {
+      "entity": { "id": "e-alpha", "platform": "default", "full_name": "acme/alpha", "description": "Alpha toolkit", "category": "tools", "score_value": 90, "verdict": "strong", "trajectory": "rising", "composite_score": 88 },
+      "raw_metadata": { "stars": 100 }
+    }
+  }
+}

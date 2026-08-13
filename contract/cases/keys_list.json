@@ -1,0 +1,27 @@
+{
+  "name": "keys_list",
+  "method": "GET",
+  "path": "/api/keys",
+  "headers": {},
+  "body": null,
+  "env": {
+    "AUTH_ENABLED": "true",
+    "API_KEYS_ENABLED": "true",
+    "SESSION_SIGNING_KEY": "contract-test-signing-key-0123456789abcdef0123456789",
+    "OIDC_ISSUER": "http://127.0.0.1:{OIDC_PORT}",
+    "OIDC_CLIENT_ID": "contract-client",
+    "OIDC_CLIENT_SECRET": "contract-secret",
+    "APP_URL": "http://127.0.0.1:{PORT}"
+  },
+  "session_cookie": { "uid": "u-test", "email": "test@example.com", "name": "Test User", "groups": ["admin"], "premium": false },
+  "expect": {
+    "status": 200,
+    "json": {
+      "keys": [
+        { "id": "k-exhausted", "label": "exhausted key", "created_at": "2026-07-01 00:00:01", "revoked": false },
+        { "id": "k-test", "label": "contract test key", "created_at": "2026-07-01 00:00:00", "revoked": false }
+      ]
+    },
+    "text": "{\"keys\":[{\"id\":\"k-exhausted\",\"label\":\"exhausted key\",\"created_at\":\"2026-07-01 00:00:01\",\"revoked\":false},{\"id\":\"k-test\",\"label\":\"contract test key\",\"created_at\":\"2026-07-01 00:00:00\",\"revoked\":false}]}\n"
+  }
+}

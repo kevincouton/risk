@@ -1,0 +1,12 @@
+{
+  "name": "cors_flagon_disallowed",
+  "method": "GET",
+  "path": "/healthz",
+  "headers": { "Origin": "https://evil.example" },
+  "body": null,
+  "env": { "AUTH_ENABLED": "true", "CORS_ORIGIN": "https://app.example.com", "APP_URL": "http://127.0.0.1:{PORT}" },
+  "expect": {
+    "status": 200,
+    "headers": { "access-control-allow-origin": { "absent": true } }
+  }
+}

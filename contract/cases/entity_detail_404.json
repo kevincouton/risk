@@ -1,0 +1,12 @@
+{
+  "name": "entity_detail_404",
+  "method": "GET",
+  "path": "/api/v1/entities/acme/nosuch",
+  "headers": {},
+  "body": null,
+  "expect": {
+    "status": 404,
+    "headers": { "x-content-type-options": "nosniff" },
+    "text": "not found\n"
+  }
+}

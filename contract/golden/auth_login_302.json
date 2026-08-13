@@ -1,0 +1,11 @@
+{
+  "body": "<a href=\"http://127.0.0.1:{OIDC_PORT}/authorize?client_id=contract-client&amp;redirect_uri=http%3A%2F%2F127.0.0.1%3A{PORT}%2Fauth%2Fcallback&amp;response_type=code&amp;scope=openid+profile+email+groups&amp;state={STATE}\">Found</a>.\n\n",
+  "headers": {
+    "access-control-allow-headers": "Content-Type, X-API-Key",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "content-type": "text/html; charset=utf-8",
+    "location": "http://127.0.0.1:{OIDC_PORT}/authorize?client_id=contract-client&redirect_uri=http%3A%2F%2F127.0.0.1%3A{PORT}%2Fauth%2Fcallback&response_type=code&scope=openid+profile+email+groups&state={STATE}",
+    "set-cookie": "oidc_state={STATE}; Path=/; Max-Age=300; HttpOnly; Secure; SameSite=Lax"
+  },
+  "status": 302
+}

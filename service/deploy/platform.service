@@ -1,0 +1,14 @@
+[Unit]
+Description=risk platform server
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/risk-server
+WorkingDirectory=/root/risk
+Environment=DATABASE_PATH=/root/risk/risk.db
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

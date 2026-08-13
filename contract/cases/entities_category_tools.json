@@ -1,0 +1,18 @@
+{
+  "name": "entities_category_tools",
+  "method": "GET",
+  "path": "/api/v1/entities?category=tools",
+  "headers": {},
+  "body": null,
+  "expect": {
+    "status": 200,
+    "json": {
+      "entities": [
+        { "id": "e-alpha", "platform": "default", "full_name": "acme/alpha", "description": "Alpha toolkit", "category": "tools", "score_value": 90, "verdict": "strong", "trajectory": "rising", "composite_score": 88 },
+        { "id": "e-gamma", "platform": "gitlab", "full_name": "acme/gamma", "description": "Gamma CLI", "category": "tools", "score_value": 80 }
+      ],
+      "limit": 50,
+      "total": 2
+    }
+  }
+}

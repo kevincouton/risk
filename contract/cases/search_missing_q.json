@@ -1,0 +1,8 @@
+{
+  "name": "search_missing_q",
+  "method": "GET",
+  "path": "/api/v1/search",
+  "headers": {},
+  "body": null,
+  "expect": { "status": 400, "text": "{\"error\": \"missing q parameter\"}\n" }
+}

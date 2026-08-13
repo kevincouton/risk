@@ -1,0 +1,19 @@
+{
+  "name": "delta_webhook_unknown_sub_deleted",
+  "method": "POST",
+  "path": "/api/billing/webhook",
+  "headers": { "Content-Type": "application/json" },
+  "body": "{\"id\":\"evt_contract_unknown_sub\",\"type\":\"customer.subscription.deleted\",\"data\":{\"object\":{\"id\":\"sub_unknown_contract\",\"customer\":\"cus_unknown_contract\"}}}",
+  "stripe_sign": true,
+  "env": {
+    "BILLING_ENABLED": "true",
+    "STRIPE_SECRET_KEY": "sk_test_contract_invalid",
+    "STRIPE_WEBHOOK_SECRET": "whsec_contract_test",
+    "STRIPE_PRICE_ID": "price_contract_test",
+    "APP_URL": "http://127.0.0.1:{PORT}"
+  },
+  "go_status": 500,
+  "go_text": "processing error\n",
+  "rust_status": 200,
+  "rust_json": { "ignored": true }
+}

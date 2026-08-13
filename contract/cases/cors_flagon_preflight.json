@@ -1,0 +1,18 @@
+{
+  "name": "cors_flagon_preflight",
+  "method": "OPTIONS",
+  "path": "/api/v1/entities",
+  "headers": { "Origin": "https://app.example.com" },
+  "body": null,
+  "env": { "AUTH_ENABLED": "true", "CORS_ORIGIN": "https://app.example.com", "APP_URL": "http://127.0.0.1:{PORT}" },
+  "expect": {
+    "status": 200,
+    "headers": {
+      "access-control-allow-origin": "https://app.example.com",
+      "access-control-allow-credentials": "true",
+      "access-control-allow-methods": "GET, POST, OPTIONS",
+      "access-control-allow-headers": "Content-Type, X-API-Key"
+    },
+    "text": ""
+  }
+}

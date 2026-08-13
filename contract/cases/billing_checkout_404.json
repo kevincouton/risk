@@ -1,0 +1,8 @@
+{
+  "name": "billing_checkout_404",
+  "method": "GET",
+  "path": "/api/billing/checkout",
+  "headers": {},
+  "body": null,
+  "expect": { "status": 404, "text": "404 page not found\n" }
+}
