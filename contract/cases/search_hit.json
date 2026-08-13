@@ -1,0 +1,17 @@
+{
+  "name": "search_hit",
+  "method": "GET",
+  "path": "/api/v1/search?q=alpha",
+  "headers": {},
+  "body": null,
+  "expect": {
+    "status": 200,
+    "json": {
+      "query": "alpha",
+      "entities": [
+        { "id": "e-alpha", "platform": "default", "full_name": "acme/alpha", "description": "Alpha toolkit", "category": "tools", "score_value": 90, "verdict": "strong", "composite_score": 88 }
+      ],
+      "total": 1
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "cors_flagoff_preflight",
+  "method": "OPTIONS",
+  "path": "/api/v1/entities",
+  "headers": { "Origin": "https://evil.example" },
+  "body": null,
+  "expect": {
+    "status": 200,
+    "headers": {
+      "access-control-allow-origin": "*",
+      "access-control-allow-methods": "GET, OPTIONS",
+      "access-control-allow-headers": "Content-Type"
+    },
+    "text": ""
+  }
+}

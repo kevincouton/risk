@@ -1,0 +1,13 @@
+{
+  "name": "stats_flag_on_with_key",
+  "method": "GET",
+  "path": "/api/v1/stats",
+  "headers": { "X-API-Key": "pk_contract_test_key_0001" },
+  "body": null,
+  "env": { "API_KEYS_ENABLED": "true" },
+  "expect": {
+    "status": 200,
+    "headers": { "x-ratelimit-remaining": "59" },
+    "json": { "total_entities": 3, "total_scores": 2, "verdicts": { "fair": 1, "strong": 1 } }
+  }
+}

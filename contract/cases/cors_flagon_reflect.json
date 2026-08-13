@@ -1,0 +1,19 @@
+{
+  "name": "cors_flagon_reflect",
+  "method": "GET",
+  "path": "/healthz",
+  "headers": { "Origin": "https://app.example.com" },
+  "body": null,
+  "env": { "AUTH_ENABLED": "true", "CORS_ORIGIN": "https://app.example.com", "APP_URL": "http://127.0.0.1:{PORT}" },
+  "expect": {
+    "status": 200,
+    "headers": {
+      "access-control-allow-origin": "https://app.example.com",
+      "access-control-allow-credentials": "true",
+      "vary": "Origin",
+      "access-control-allow-methods": "GET, POST, OPTIONS",
+      "access-control-allow-headers": "Content-Type, X-API-Key"
+    },
+    "json": { "status": "ok" }
+  }
+}

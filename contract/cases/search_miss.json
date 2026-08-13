@@ -1,0 +1,8 @@
+{
+  "name": "search_miss",
+  "method": "GET",
+  "path": "/api/v1/search?q=zzzzz",
+  "headers": {},
+  "body": null,
+  "expect": { "status": 200, "json": { "query": "zzzzz", "entities": null, "total": 0 } }
+}

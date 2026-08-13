@@ -16,7 +16,7 @@ Early development. Bootstrapped from platform-templates.
 
 ## Stack
 
-- Backend: Go (SQLite, REST API)
+- Backend: Rust (SQLite, REST API)
 - Frontend: Nuxt 4 (Vite+, Tailwind)
 - Database: SQLite
 - Deployment: systemd + Caddy
@@ -25,7 +25,7 @@ Early development. Bootstrapped from platform-templates.
 
 ```bash
 # Backend
-cd api && go mod tidy && go run cmd/server/main.go
+cd service && cargo run -p server
 
 # Frontend
 cd web && npm ci && npm run dev

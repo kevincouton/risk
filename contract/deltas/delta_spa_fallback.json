@@ -1,0 +1,11 @@
+{
+  "name": "delta_spa_fallback",
+  "method": "GET",
+  "path": "/some/route",
+  "headers": {},
+  "body": null,
+  "go_status": 404,
+  "go_text": "404 page not found\n",
+  "rust_status": 200,
+  "rust_text": "<!doctype html><html><head><title>contract</title></head><body>contract spa</body></html>\n"
+}

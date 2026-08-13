@@ -1,0 +1,9 @@
+[workspace]
+resolver = "2"
+members = ["crates/chassis", "crates/server"]
+
+[workspace.dependencies]
+# topcoat rev pinned by R-0 (service/SERVER_SHELL.md); `tower` feature required
+# for TowerRoute (SERVER_SHELL.md static-mount idiom).
+topcoat = { git = "https://github.com/tokio-rs/topcoat", rev = "371c7403fcbf4d40bbacb2f87eb98d9ce00e76c8", features = ["tower"] }
+tower = { version = "0.5", features = ["util"] }

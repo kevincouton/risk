@@ -1,0 +1,23 @@
+{
+  "name": "keys_delete",
+  "method": "DELETE",
+  "path": "/api/keys/k-test",
+  "headers": {},
+  "body": null,
+  "env": {
+    "AUTH_ENABLED": "true",
+    "API_KEYS_ENABLED": "true",
+    "SESSION_SIGNING_KEY": "contract-test-signing-key-0123456789abcdef0123456789",
+    "OIDC_ISSUER": "http://127.0.0.1:{OIDC_PORT}",
+    "OIDC_CLIENT_ID": "contract-client",
+    "OIDC_CLIENT_SECRET": "contract-secret",
+    "APP_URL": "http://127.0.0.1:{PORT}"
+  },
+  "session_cookie": { "uid": "u-test", "email": "test@example.com", "name": "Test User", "groups": ["admin"], "premium": false },
+  "isolate": true,
+  "expect": {
+    "status": 200,
+    "json": { "ok": true },
+    "text": "{\"ok\":true}"
+  }
+}

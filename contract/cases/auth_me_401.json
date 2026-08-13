@@ -1,0 +1,16 @@
+{
+  "name": "auth_me_401",
+  "method": "GET",
+  "path": "/auth/me",
+  "headers": {},
+  "body": null,
+  "env": {
+    "AUTH_ENABLED": "true",
+    "SESSION_SIGNING_KEY": "contract-test-signing-key-0123456789abcdef0123456789",
+    "OIDC_ISSUER": "http://127.0.0.1:{OIDC_PORT}",
+    "OIDC_CLIENT_ID": "contract-client",
+    "OIDC_CLIENT_SECRET": "contract-secret",
+    "APP_URL": "http://127.0.0.1:{PORT}"
+  },
+  "expect": { "status": 401, "text": "{\"error\":\"unauthenticated\"}\n" }
+}

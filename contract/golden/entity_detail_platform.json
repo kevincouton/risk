@@ -1,0 +1,22 @@
+{
+  "body": {
+    "entity": {
+      "category": "tools",
+      "description": "Gamma CLI",
+      "full_name": "acme/gamma",
+      "id": "e-gamma",
+      "platform": "gitlab",
+      "score_value": 80
+    },
+    "raw_metadata": {
+      "stars": 75
+    }
+  },
+  "headers": {
+    "access-control-allow-headers": "Content-Type",
+    "access-control-allow-methods": "GET, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-type": "application/json"
+  },
+  "status": 200
+}

@@ -1,0 +1,17 @@
+{
+  "body": {
+    "display_name": "Test User",
+    "email": "test@example.com",
+    "groups": [
+      "admin"
+    ],
+    "id": "u-test",
+    "premium": true
+  },
+  "headers": {
+    "access-control-allow-headers": "Content-Type, X-API-Key",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "content-type": "application/json"
+  },
+  "status": 200
+}

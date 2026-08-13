@@ -1,0 +1,12 @@
+{
+  "body": {
+    "error": "revoke failed"
+  },
+  "headers": {
+    "access-control-allow-headers": "Content-Type, X-API-Key",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "content-type": "text/plain; charset=utf-8",
+    "x-content-type-options": "nosniff"
+  },
+  "status": 404
+}

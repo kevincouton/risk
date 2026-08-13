@@ -1,0 +1,8 @@
+{
+  "name": "healthz",
+  "method": "GET",
+  "path": "/healthz",
+  "headers": {},
+  "body": null,
+  "expect": { "status": 200, "json": { "status": "ok" } }
+}

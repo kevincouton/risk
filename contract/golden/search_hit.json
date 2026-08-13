@@ -1,0 +1,25 @@
+{
+  "body": {
+    "entities": [
+      {
+        "category": "tools",
+        "composite_score": 88,
+        "description": "Alpha toolkit",
+        "full_name": "acme/alpha",
+        "id": "e-alpha",
+        "platform": "default",
+        "score_value": 90,
+        "verdict": "strong"
+      }
+    ],
+    "query": "alpha",
+    "total": 1
+  },
+  "headers": {
+    "access-control-allow-headers": "Content-Type",
+    "access-control-allow-methods": "GET, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-type": "application/json"
+  },
+  "status": 200
+}

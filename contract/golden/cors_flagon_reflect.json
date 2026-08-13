@@ -1,0 +1,14 @@
+{
+  "body": {
+    "status": "ok"
+  },
+  "headers": {
+    "access-control-allow-credentials": "true",
+    "access-control-allow-headers": "Content-Type, X-API-Key",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "https://app.example.com",
+    "content-type": "text/plain; charset=utf-8",
+    "vary": "Origin"
+  },
+  "status": 200
+}
