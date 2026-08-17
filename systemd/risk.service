@@ -1,0 +1,15 @@
+[Unit]
+Description=risk platform server
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/risk
+EnvironmentFile=/etc/risk/env
+ExecStart=/usr/local/bin/risk-server
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

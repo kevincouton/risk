@@ -1,0 +1,13 @@
+[Unit]
+Description=risk ingest (github + depsdev collectors, then score)
+After=network.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/root/risk
+EnvironmentFile=/etc/risk/env
+ExecStart=-/usr/local/bin/risk-ingest -collector github
+ExecStart=-/usr/local/bin/risk-ingest -collector depsdev
+ExecStart=/usr/local/bin/risk-score --all
+TimeoutStartSec=1800

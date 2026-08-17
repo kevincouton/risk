@@ -1,0 +1,9 @@
+[Unit]
+Description=Run risk ingest every 6 hours (minute 23)
+
+[Timer]
+OnCalendar=*-*-* 00/6:23:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
