@@ -135,7 +135,11 @@ fn empty_search_page_yields_zero_entities() {
 fn run_collector_retries_once_after_500_then_upserts() {
     let server = Server::run();
     // Use a cycling responder so the first request returns 500 and the second
-    // (retry) returns the successful search payload.
+    // (retry) returns the successful search payload. We cannot use two separate
+    // httptest expectations here because httptest 0.16.4 answers an exhausted
+    // expectation with a hard 500 (`times_error`) instead of falling through to
+    // a later expectation, so chained expectations would make both requests
+    // return 500.
     server.expect(
         Expectation::matching(all_of![
             request::method_path("GET", SEARCH_PATH),
