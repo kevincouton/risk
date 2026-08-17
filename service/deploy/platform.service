@@ -6,7 +6,7 @@ After=network.target
 Type=simple
 ExecStart=/usr/local/bin/risk-server
 WorkingDirectory=/root/risk
-Environment=DATABASE_PATH=/root/risk/risk.db
+Environment=DATABASE_PATH=/var/lib/risk/risk.db
 Restart=on-failure
 RestartSec=3
 

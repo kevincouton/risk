@@ -5,6 +5,8 @@
 //! rolled-back batch reports 0 upserted — the upsert is ONE transaction, so a
 //! rollback unwrites everything and RunResult.upserted stays 0.
 
+pub mod github_topic;
+
 use anyhow::{anyhow, Context};
 use rusqlite::params;
 use std::time::{Duration, Instant};
