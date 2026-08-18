@@ -233,6 +233,7 @@ impl Collector for DepsDevCollector {
         "depsdev"
     }
 
+    #[cfg_attr(feature = "hotpath", hotpath::measure)]
     fn fetch(&self) -> Result<Vec<CollectedEntity>> {
         let now_unix = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)

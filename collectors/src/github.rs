@@ -43,6 +43,7 @@ impl Collector for GithubCollector {
         "github"
     }
 
+    #[cfg_attr(feature = "hotpath", hotpath::measure)]
     fn fetch(&self) -> Result<Vec<CollectedEntity>> {
         let mut seen = HashSet::new();
         let mut out = Vec::new();
