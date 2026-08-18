@@ -54,7 +54,7 @@ jobs:
         run: |
           cargo llvm-cov --workspace --lcov --output-path lcov.info
           cargo crap --workspace --lcov lcov.info --threshold 15 --fail-above
-      - name: CRAP check collectors crate
+      - name: CRAP check collectors workspace
         working-directory: ./collectors
         run: |
           cargo llvm-cov --lcov --output-path lcov.info
