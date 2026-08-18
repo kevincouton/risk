@@ -42,6 +42,19 @@ jobs:
       - run: npm test
       - run: npm run build
 
+  crap-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - run: cargo install cargo-crap
+      - name: CRAP check service workspace
+        working-directory: ./service
+        run: |
+          cargo llvm-cov --workspace --lcov --output-path lcov.info
+          cargo crap --workspace --lcov lcov.info --threshold 15 --fail-above
+
   deploy:
     needs: [service, web]
     runs-on: ubuntu-latest

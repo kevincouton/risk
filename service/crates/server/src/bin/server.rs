@@ -18,6 +18,7 @@ use topcoat::router::{
 const BODY_LIMIT: usize = 1 << 20;
 
 #[tokio::main]
+#[cfg_attr(feature = "hotpath", hotpath::main)]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
     let cfg = chassis::config::Config::load();
@@ -107,6 +108,7 @@ async fn main() -> anyhow::Result<()> {
 }
 
 // SERVER_SHELL.md idiom 2: Request/Response mapping only.
+#[cfg_attr(feature = "hotpath", hotpath::measure)]
 async fn handle(state: Arc<AppState>, req: Request) -> Response {
     let method = req.method().as_str().to_string();
     let path = req.uri().path().to_string();

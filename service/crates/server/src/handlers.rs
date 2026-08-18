@@ -628,6 +628,7 @@ pub fn keys_revoke(
 // Go main.go); absent routes fall through to the SPA, which 404s /api//auth
 // paths exactly like Go's file server did. ----
 
+#[cfg_attr(feature = "hotpath", hotpath::measure)]
 pub async fn dispatch(
     state: &AppState,
     method: &str,

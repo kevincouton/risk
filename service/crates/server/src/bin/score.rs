@@ -42,6 +42,7 @@ fn entity_ids(conn: &rusqlite::Connection, args: &[String]) -> Result<Vec<String
     }
 }
 
+#[cfg_attr(feature = "hotpath", hotpath::main)]
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_writer(std::io::stderr)

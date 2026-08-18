@@ -31,6 +31,11 @@ rusqlite = { version = "0.32", features = ["bundled"] } # same version as chassi
 tracing = "0.1"
 tracing-subscriber = "0.3"
 url = "2" # query-pair decoding (Go r.URL.Query semantics)
+hotpath = { version = "0.23", optional = true }
+
+[features]
+# hotpath/hotpath enables the actual profiler; dep:hotpath alone leaves the macros as no-ops.
+hotpath = ["dep:hotpath", "hotpath/hotpath"]
 
 [dev-dependencies]
 tempfile = "3"
