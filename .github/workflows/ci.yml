@@ -61,7 +61,7 @@ jobs:
           cargo crap --lcov lcov.info --threshold 15 --fail-above
 
   deploy:
-    needs: [service, web]
+    needs: [service, web, crap-check]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push' && vars.DEPLOY_ENABLED == 'true'
     steps:
