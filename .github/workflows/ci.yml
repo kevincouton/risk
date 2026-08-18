@@ -48,7 +48,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: taiki-e/install-action@cargo-llvm-cov
-      - run: cargo install cargo-crap
+      - run: cargo install cargo-crap --version 0.4.3
       - name: CRAP check service workspace
         working-directory: ./service
         run: |

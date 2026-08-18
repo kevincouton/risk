@@ -14,7 +14,7 @@ tracing-subscriber = "0.3"
 hotpath = { version = "0.23", optional = true }
 
 [features]
-hotpath = ["dep:hotpath"]
+hotpath = ["dep:hotpath", "hotpath/hotpath"]
 
 [dev-dependencies]
 httptest = "0.16"
