@@ -1,0 +1,203 @@
+{
+  "$schema": "https://raw.githubusercontent.com/minikin/cargo-crap/main/schemas/report-v1.json",
+  "version": "0.4.3",
+  "entries": [
+    {
+      "file": "./src/bin/ingest.rs",
+      "function": "main",
+      "line": 32,
+      "cyclomatic": 15.0,
+      "coverage": 68.29268292682927,
+      "crap": 22.172342246920383
+    },
+    {
+      "file": "./src/bin/ingest.rs",
+      "function": "registry",
+      "line": 16,
+      "cyclomatic": 1.0,
+      "coverage": 100.0,
+      "crap": 1.0
+    },
+    {
+      "file": "./src/bin/ingest.rs",
+      "function": "usage",
+      "line": 23,
+      "cyclomatic": 1.0,
+      "coverage": 0.0,
+      "crap": 2.0
+    },
+    {
+      "file": "./src/depsdev.rs",
+      "function": "DepsDevClient::default",
+      "line": 144,
+      "cyclomatic": 1.0,
+      "coverage": 0.0,
+      "crap": 2.0
+    },
+    {
+      "file": "./src/depsdev.rs",
+      "function": "DepsDevClient::get",
+      "line": 71,
+      "cyclomatic": 5.0,
+      "coverage": 94.44444444444444,
+      "crap": 5.004286694101509
+    },
+    {
+      "file": "./src/depsdev.rs",
+      "function": "DepsDevClient::new",
+      "line": 54,
+      "cyclomatic": 1.0,
+      "coverage": 100.0,
+      "crap": 1.0
+    },
+    {
+      "file": "./src/depsdev.rs",
+      "function": "DepsDevClient::package",
+      "line": 93,
+      "cyclomatic": 2.0,
+      "coverage": 100.0,
+      "crap": 2.0
+    },
+    {
+      "file": "./src/depsdev.rs",
+      "function": "DepsDevClient::version_advisories",
+      "line": 121,
+      "cyclomatic": 2.0,
+      "coverage": 94.11764705882352,
+      "crap": 2.0008141664970487
+    },
+    {
+      "file": "./src/depsdev.rs",
+      "function": "DepsDevClient::with_base_url",
+      "line": 59,
+      "cyclomatic": 1.0,
+      "coverage": 100.0,
+      "crap": 1.0
+    },
+    {
+      "file": "./src/depsdev.rs",
+      "function": "DepsDevCollector::enrich",
+      "line": 179,
+      "cyclomatic": 9.0,
+      "coverage": 81.3953488372093,
+      "crap": 9.521614449042223
+    },
+    {
+      "file": "./src/depsdev.rs",
+      "function": "DepsDevCollector::fetch",
+      "line": 237,
+      "cyclomatic": 5.0,
+      "coverage": 90.0,
+      "crap": 5.025
+    },
+    {
+      "file": "./src/depsdev.rs",
+      "function": "DepsDevCollector::from_env",
+      "line": 159,
+      "cyclomatic": 1.0,
+      "coverage": 100.0,
+      "crap": 1.0
+    },
+    {
+      "file": "./src/depsdev.rs",
+      "function": "DepsDevCollector::name",
+      "line": 232,
+      "cyclomatic": 1.0,
+      "coverage": 100.0,
+      "crap": 1.0
+    },
+    {
+      "file": "./src/depsdev.rs",
+      "function": "DepsDevCollector::with_clients",
+      "line": 167,
+      "cyclomatic": 1.0,
+      "coverage": 100.0,
+      "crap": 1.0
+    },
+    {
+      "file": "./src/depsdev.rs",
+      "function": "days_from_civil",
+      "line": 281,
+      "cyclomatic": 4.0,
+      "coverage": 100.0,
+      "crap": 4.0
+    },
+    {
+      "file": "./src/depsdev.rs",
+      "function": "freshness_days",
+      "line": 266,
+      "cyclomatic": 10.0,
+      "coverage": 91.66666666666666,
+      "crap": 10.05787037037037
+    },
+    {
+      "file": "./src/github.rs",
+      "function": "GithubCollector::fetch",
+      "line": 47,
+      "cyclomatic": 5.0,
+      "coverage": 91.66666666666666,
+      "crap": 5.014467592592593
+    },
+    {
+      "file": "./src/github.rs",
+      "function": "GithubCollector::from_env",
+      "line": 28,
+      "cyclomatic": 1.0,
+      "coverage": 100.0,
+      "crap": 1.0
+    },
+    {
+      "file": "./src/github.rs",
+      "function": "GithubCollector::name",
+      "line": 42,
+      "cyclomatic": 1.0,
+      "coverage": 100.0,
+      "crap": 1.0
+    },
+    {
+      "file": "./src/github.rs",
+      "function": "GithubCollector::with_client",
+      "line": 33,
+      "cyclomatic": 1.0,
+      "coverage": 100.0,
+      "crap": 1.0
+    },
+    {
+      "file": "./src/github.rs",
+      "function": "map_repo",
+      "line": 91,
+      "cyclomatic": 5.0,
+      "coverage": 100.0,
+      "crap": 5.0
+    },
+    {
+      "file": "./src/github.rs",
+      "function": "search",
+      "line": 68,
+      "cyclomatic": 2.0,
+      "coverage": 100.0,
+      "crap": 2.0
+    },
+    {
+      "file": "./src/github.rs",
+      "function": "urlencode",
+      "line": 140,
+      "cyclomatic": 4.0,
+      "coverage": 100.0,
+      "crap": 4.0
+    }
+  ],
+  "diagnostics": {
+    "analyzed_files": 3,
+    "lcov_files": 3,
+    "matched_files": 3,
+    "source_only": {
+      "count": 0,
+      "examples": []
+    },
+    "lcov_only": {
+      "count": 0,
+      "examples": []
+    }
+  }
+}
