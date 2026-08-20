@@ -168,3 +168,56 @@ fn check_and_record_insert_error_fails_closed() {
         "insert failure must propagate, got {result:?}"
     );
 }
+
+// ---- Go port: TestListKeys ----
+#[test]
+fn list_keys_empty_for_unknown_user() {
+    let (_d, conn) = open_test_db();
+    let keys = apikeys::list_keys(&conn, "no-such-user").unwrap();
+    assert!(keys.is_empty());
+}
+
+#[test]
+fn list_keys_returns_key_info() {
+    let (_d, conn) = open_test_db();
+    let plaintext = apikeys::create_key(&conn, "u1", "ci").unwrap();
+    let identity = apikeys::authenticate(&conn, &plaintext).unwrap();
+    let keys = apikeys::list_keys(&conn, "u1").unwrap();
+    assert_eq!(keys.len(), 1);
+    assert_eq!(keys[0].id, identity.key_id);
+    assert_eq!(keys[0].label, "ci");
+    assert!(!keys[0].created_at.is_empty());
+    assert!(!keys[0].revoked);
+}
+
+#[test]
+fn list_keys_orders_newest_first() {
+    let (_d, conn) = open_test_db();
+    // Insert rows with explicit created_at timestamps so ordering is
+    // deterministic regardless of SQLite datetime('now') granularity.
+    conn.execute(
+        "INSERT INTO api_keys (id, user_id, key_hash, label, created_at) VALUES (?, ?, ?, ?, ?)",
+        rusqlite::params![db::new_id(), "u1", "hash1", "first", "2024-01-01 00:00:00"],
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO api_keys (id, user_id, key_hash, label, created_at) VALUES (?, ?, ?, ?, ?)",
+        rusqlite::params![db::new_id(), "u1", "hash2", "second", "2024-01-02 00:00:00"],
+    )
+    .unwrap();
+    let keys = apikeys::list_keys(&conn, "u1").unwrap();
+    assert_eq!(keys.len(), 2);
+    assert_eq!(keys[0].label, "second");
+    assert_eq!(keys[1].label, "first");
+}
+
+#[test]
+fn list_keys_includes_revoked_keys() {
+    let (_d, conn) = open_test_db();
+    let plaintext = apikeys::create_key(&conn, "u1", "ci").unwrap();
+    let identity = apikeys::authenticate(&conn, &plaintext).unwrap();
+    apikeys::revoke_key(&conn, &identity.key_id, "u1").unwrap();
+    let keys = apikeys::list_keys(&conn, "u1").unwrap();
+    assert_eq!(keys.len(), 1);
+    assert!(keys[0].revoked);
+}

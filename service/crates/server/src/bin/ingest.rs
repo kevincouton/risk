@@ -31,58 +31,207 @@ fn usage() -> ! {
     std::process::exit(2);
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Parsed {
+    List,
+    Run(String),
+    Usage,
+}
+
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_writer(std::io::stderr)
         .init();
 
+    let parsed = parse_args(std::env::args().skip(1));
+    if parsed == Parsed::Usage {
+        usage();
+    }
+    run(registry(), parsed)
+}
+
+/// Parse the ingest CLI flags. Unknown flags, missing values, or no arguments
+/// all map to `Parsed::Usage` so `main` can exit with code 2.
+fn parse_args(mut args: impl Iterator<Item = String>) -> Parsed {
     let mut list = false;
     let mut name: Option<String> = None;
-    let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
             "-list" | "--list" => list = true,
-            "-collector" | "--collector" => name = Some(args.next().unwrap_or_else(|| usage())),
+            "-collector" | "--collector" => {
+                let Some(n) = args.next() else {
+                    return Parsed::Usage;
+                };
+                name = Some(n);
+            }
             "-rate-limit" | "--rate-limit" | "-max-retries" | "--max-retries" | "-batch-size"
             | "--batch-size" => {
                 let _ = args.next();
                 eprintln!("ingest: warning: {a} is ignored by the Rust runtime");
             }
-            _ => usage(),
+            _ => return Parsed::Usage,
         }
     }
 
-    let all = registry();
     if list {
-        for c in &all {
-            println!("{}", c.name());
-        }
-        return Ok(());
+        return Parsed::List;
     }
-    let selected: Vec<Box<dyn Collector>> = match name {
-        Some(n) => {
-            let names: Vec<&'static str> = all.iter().map(|c| c.name()).collect();
-            match all.into_iter().find(|c| c.name() == n) {
-                Some(c) => vec![c],
-                None => bail!("unknown collector {n:?}; registered: {names:?}"),
-            }
-        }
-        None => {
-            // Go parity (cmd/ingest/main.go:33-37): empty -collector prints
-            // usage + the registered names to stderr and exits 2.
-            let names: Vec<&'static str> = all.iter().map(|c| c.name()).collect();
-            eprintln!(
-                "Usage: ingest -collector <name> [-rate-limit N] [-max-retries N] [-batch-size N]"
-            );
-            eprintln!("Registered collectors: [{}]", names.join(" "));
-            std::process::exit(2);
-        }
-    };
+    match name {
+        Some(n) => Parsed::Run(n),
+        None => Parsed::Usage,
+    }
+}
 
-    let cfg = Config::load();
-    let mut conn = db::open(&cfg.database_path).context("open db")?;
-    db::migrate(&conn).context("migrate")?;
-    run_all(&mut conn, selected)?;
-    println!("Ingest complete");
-    Ok(())
+/// Resolve a collector name against the registry. Errors (unknown name) are
+/// fatal and propagate as `Err` so the process exits non-zero.
+fn select_collectors(
+    all: Vec<Box<dyn Collector>>,
+    name: String,
+) -> Result<Vec<Box<dyn Collector>>> {
+    let names: Vec<&'static str> = all.iter().map(|c| c.name()).collect();
+    match all.into_iter().find(|c| c.name() == name) {
+        Some(c) => Ok(vec![c]),
+        None => bail!("unknown collector {name:?}; registered: {names:?}"),
+    }
+}
+
+/// Run the selected action against the chassis database.
+fn run(all: Vec<Box<dyn Collector>>, parsed: Parsed) -> Result<()> {
+    match parsed {
+        Parsed::List => {
+            for c in &all {
+                println!("{}", c.name());
+            }
+            Ok(())
+        }
+        Parsed::Run(name) => {
+            let selected = select_collectors(all, name)?;
+            let cfg = Config::load();
+            let mut conn = db::open(&cfg.database_path).context("open db")?;
+            db::migrate(&conn).context("migrate")?;
+            run_all(&mut conn, selected)?;
+            println!("Ingest complete");
+            Ok(())
+        }
+        Parsed::Usage => usage(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chassis::collectors::CollectedEntity;
+
+    struct DummyCollector;
+
+    impl Collector for DummyCollector {
+        fn name(&self) -> &'static str {
+            "dummy"
+        }
+
+        fn fetch(&self) -> anyhow::Result<Vec<CollectedEntity>> {
+            Ok(vec![])
+        }
+    }
+
+    fn dummy_registry() -> Vec<Box<dyn Collector>> {
+        vec![Box::new(DummyCollector)]
+    }
+
+    #[test]
+    fn parse_args_list() {
+        assert_eq!(
+            parse_args(["-list"].map(String::from).into_iter()),
+            Parsed::List
+        );
+    }
+
+    #[test]
+    fn parse_args_collector() {
+        assert_eq!(
+            parse_args(["-collector", "dummy"].map(String::from).into_iter()),
+            Parsed::Run("dummy".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_args_collector_double_dash() {
+        assert_eq!(
+            parse_args(["--collector", "dummy"].map(String::from).into_iter()),
+            Parsed::Run("dummy".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_args_ignored_flags() {
+        assert_eq!(
+            parse_args(
+                [
+                    "-collector",
+                    "dummy",
+                    "-rate-limit",
+                    "10",
+                    "--max-retries",
+                    "3"
+                ]
+                .map(String::from)
+                .into_iter()
+            ),
+            Parsed::Run("dummy".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_args_no_args_is_usage() {
+        assert_eq!(parse_args(std::iter::empty()), Parsed::Usage);
+    }
+
+    #[test]
+    fn parse_args_unknown_flag_is_usage() {
+        assert_eq!(
+            parse_args(["-foo"].map(String::from).into_iter()),
+            Parsed::Usage
+        );
+    }
+
+    #[test]
+    fn parse_args_collector_without_value_is_usage() {
+        assert_eq!(
+            parse_args(["-collector"].map(String::from).into_iter()),
+            Parsed::Usage
+        );
+    }
+
+    #[test]
+    fn select_collectors_finds_match() {
+        let selected = select_collectors(dummy_registry(), "dummy".to_string()).unwrap();
+        assert_eq!(selected.len(), 1);
+        assert_eq!(selected[0].name(), "dummy");
+    }
+
+    #[test]
+    fn select_collectors_unknown_errors() {
+        let result = select_collectors(dummy_registry(), "missing".to_string());
+        match result {
+            Err(e) => {
+                let err = e.to_string();
+                assert!(err.contains("unknown collector"));
+                assert!(err.contains("dummy"));
+            }
+            Ok(_) => panic!("expected error"),
+        }
+    }
+
+    #[test]
+    fn run_list_prints_names() {
+        // list returns Ok and does not touch the database.
+        run(dummy_registry(), Parsed::List).unwrap();
+    }
+
+    #[test]
+    fn run_with_collector_succeeds() {
+        let dir = tempfile::tempdir().unwrap();
+        std::env::set_var("DATABASE_PATH", dir.path().join("test.db"));
+        run(dummy_registry(), Parsed::Run("dummy".to_string())).unwrap();
+    }
 }

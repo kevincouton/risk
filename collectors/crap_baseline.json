@@ -6,9 +6,17 @@
       "file": "./src/bin/ingest.rs",
       "function": "main",
       "line": 32,
-      "cyclomatic": 15.0,
-      "coverage": 68.29268292682927,
-      "crap": 22.172342246920383
+      "cyclomatic": 1.0,
+      "coverage": 100.0,
+      "crap": 1.0
+    },
+    {
+      "file": "./src/bin/ingest.rs",
+      "function": "parse_args",
+      "line": 46,
+      "cyclomatic": 9.0,
+      "coverage": 71.42857142857143,
+      "crap": 10.889212827988338
     },
     {
       "file": "./src/bin/ingest.rs",
@@ -17,6 +25,22 @@
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0
+    },
+    {
+      "file": "./src/bin/ingest.rs",
+      "function": "run",
+      "line": 84,
+      "cyclomatic": 9.0,
+      "coverage": 68.42105263157895,
+      "crap": 11.550809155853623
+    },
+    {
+      "file": "./src/bin/ingest.rs",
+      "function": "select_collectors",
+      "line": 76,
+      "cyclomatic": 3.0,
+      "coverage": 100.0,
+      "crap": 3.0
     },
     {
       "file": "./src/bin/ingest.rs",

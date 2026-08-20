@@ -42,6 +42,7 @@ pub struct User {
 }
 
 /// oidc.go TokenClaims: the verified OIDC claims we keep.
+#[derive(Debug)]
 pub struct TokenClaims {
     pub sub: String,
     pub email: Option<String>,
@@ -371,7 +372,7 @@ mod oidc {
 
     pub struct RealFlow {
         client: PlatformClient,
-        authorization_endpoint: String,
+        pub(crate) authorization_endpoint: String,
         client_id: String,
         redirect_uri: String,
     }
@@ -402,15 +403,22 @@ mod oidc {
 
     /// Go-compatible query escaping (url.QueryEscape): alphanumerics and
     /// -_.~ pass through, space → '+', everything else %XX uppercase.
-    fn query_escape(s: &str) -> String {
+    const QUERY_UNRESERVED: &[u8] =
+        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.~";
+
+    fn is_query_unreserved(b: u8) -> bool {
+        QUERY_UNRESERVED.contains(&b)
+    }
+
+    pub(crate) fn query_escape(s: &str) -> String {
         let mut out = String::new();
         for b in s.bytes() {
-            match b {
-                b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                    out.push(b as char)
-                }
-                b' ' => out.push('+'),
-                _ => out.push_str(&format!("%{b:02X}")),
+            if b == b' ' {
+                out.push('+');
+            } else if is_query_unreserved(b) {
+                out.push(b as char);
+            } else {
+                out.push_str(&format!("%{b:02X}"));
             }
         }
         out
@@ -507,6 +515,177 @@ mod tests {
         assert!(
             verify_session(KEY, "no-dot-at-all").is_none(),
             "malformed cookie"
+        );
+    }
+
+    #[test]
+    fn callback_error_display() {
+        assert_eq!(
+            CallbackError::InvalidState.to_string(),
+            "invalid oauth state"
+        );
+        let err = CallbackError::Exchange(anyhow::anyhow!("exchange failed"));
+        assert_eq!(err.to_string(), "token exchange failed: exchange failed");
+        let err = CallbackError::Upsert(anyhow::anyhow!("upsert failed"));
+        assert_eq!(err.to_string(), "user upsert failed: upsert failed");
+    }
+
+    #[test]
+    fn query_escape_cases() {
+        assert_eq!(super::oidc::query_escape("abcABC123-_.~"), "abcABC123-_.~");
+        assert_eq!(super::oidc::query_escape("hello world"), "hello+world");
+        assert_eq!(super::oidc::query_escape("foo@bar"), "foo%40bar");
+        assert_eq!(
+            super::oidc::query_escape("a/b?c=d&e=f"),
+            "a%2Fb%3Fc%3Dd%26e%3Df"
+        );
+    }
+
+    fn test_config(issuer: &str, app_url: &str) -> crate::config::Config {
+        crate::config::Config {
+            platform_name: "risk".into(),
+            database_path: "".into(),
+            api_port: 8080,
+            posthog_api_key: "".into(),
+            ga_id: "".into(),
+            ads_id: "".into(),
+            auth_enabled: true,
+            oidc_issuer: issuer.into(),
+            oidc_client_id: "client".into(),
+            oidc_client_secret: "secret".into(),
+            session_signing_key: "key".into(),
+            app_url: app_url.into(),
+            cors_origin: "".into(),
+            billing_enabled: false,
+            stripe_secret_key: "".into(),
+            stripe_webhook_secret: "".into(),
+            stripe_price_id: "".into(),
+            api_keys_enabled: false,
+            dev_user_id: "".into(),
+        }
+    }
+
+    #[tokio::test]
+    async fn real_flow_discovers_authorization_endpoint() {
+        use httptest::{matchers::*, responders::*, Expectation, Server};
+        let server = Server::run();
+        let issuer = server.url("/").to_string();
+        server.expect(
+            Expectation::matching(request::method_path(
+                "GET",
+                "/.well-known/openid-configuration",
+            ))
+            .times(1)
+            .respond_with(json_encoded(serde_json::json!({
+                "issuer": issuer,
+                "authorization_endpoint": format!("{issuer}auth"),
+                "token_endpoint": format!("{issuer}token"),
+                "jwks_uri": format!("{issuer}jwks"),
+                "response_types_supported": ["code"],
+                "subject_types_supported": ["public"],
+                "id_token_signing_alg_values_supported": ["RS256"],
+            }))),
+        );
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/jwks"))
+                .times(1)
+                .respond_with(json_encoded(serde_json::json!({ "keys": [] }))),
+        );
+        let cfg = test_config(&issuer, "http://localhost:8080");
+        let flow = super::oidc::RealFlow::discover(&cfg)
+            .await
+            .expect("discover must succeed");
+        assert_eq!(flow.authorization_endpoint, format!("{issuer}auth"));
+        let (url, _state, _nonce) = flow.authorize();
+        assert!(url.starts_with(&format!(
+            "{issuer}auth?client_id=client&redirect_uri=http%3A%2F%2Flocalhost%3A8080%2Fauth%2Fcallback&response_type=code&scope=openid+profile+email+groups&state="
+        )));
+    }
+
+    #[tokio::test]
+    async fn real_flow_exchange_requires_id_token() {
+        use httptest::{matchers::*, responders::*, Expectation, Server};
+        let server = Server::run();
+        let issuer = server.url("/").to_string();
+        server.expect(
+            Expectation::matching(request::method_path(
+                "GET",
+                "/.well-known/openid-configuration",
+            ))
+            .times(1..)
+            .respond_with(json_encoded(serde_json::json!({
+                "issuer": issuer,
+                "authorization_endpoint": format!("{issuer}auth"),
+                "token_endpoint": format!("{issuer}token"),
+                "jwks_uri": format!("{issuer}jwks"),
+                "response_types_supported": ["code"],
+                "subject_types_supported": ["public"],
+                "id_token_signing_alg_values_supported": ["RS256"],
+            }))),
+        );
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/jwks"))
+                .times(1..)
+                .respond_with(json_encoded(serde_json::json!({ "keys": [] }))),
+        );
+        server.expect(
+            Expectation::matching(request::method_path("POST", "/token"))
+                .times(1)
+                .respond_with(json_encoded(serde_json::json!({
+                    "access_token": "atoken",
+                    "token_type": "Bearer",
+                }))),
+        );
+        let cfg = test_config(&issuer, "http://localhost:8080");
+        let flow = super::oidc::RealFlow::discover(&cfg)
+            .await
+            .expect("discover must succeed");
+        let err = flow.exchange("code", "").await.unwrap_err();
+        assert!(
+            err.to_string().contains("no id_token"),
+            "want missing id_token error, got {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn real_flow_exchange_propagates_token_error() {
+        use httptest::{matchers::*, responders::*, Expectation, Server};
+        let server = Server::run();
+        let issuer = server.url("/").to_string();
+        server.expect(
+            Expectation::matching(request::method_path(
+                "GET",
+                "/.well-known/openid-configuration",
+            ))
+            .times(1..)
+            .respond_with(json_encoded(serde_json::json!({
+                "issuer": issuer,
+                "authorization_endpoint": format!("{issuer}auth"),
+                "token_endpoint": format!("{issuer}token"),
+                "jwks_uri": format!("{issuer}jwks"),
+                "response_types_supported": ["code"],
+                "subject_types_supported": ["public"],
+                "id_token_signing_alg_values_supported": ["RS256"],
+            }))),
+        );
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/jwks"))
+                .times(1..)
+                .respond_with(json_encoded(serde_json::json!({ "keys": [] }))),
+        );
+        server.expect(
+            Expectation::matching(request::method_path("POST", "/token"))
+                .times(1)
+                .respond_with(status_code(400)),
+        );
+        let cfg = test_config(&issuer, "http://localhost:8080");
+        let flow = super::oidc::RealFlow::discover(&cfg)
+            .await
+            .expect("discover must succeed");
+        let err = flow.exchange("code", "").await.unwrap_err();
+        assert!(
+            err.to_string().contains("Server returned"),
+            "want token endpoint error, got {err}"
         );
     }
 }

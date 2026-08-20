@@ -132,72 +132,90 @@ fn outcome(status: u16, body: &str) -> WebhookOutcome {
     }
 }
 
+#[derive(serde::Deserialize)]
+struct Event {
+    #[serde(rename = "type")]
+    ty: String,
+    data: EventData,
+}
+
+#[derive(serde::Deserialize)]
+struct EventData {
+    object: serde_json::Value,
+}
+
 /// webhook.go ServeHTTP as a pure function.
 pub fn handle_webhook(db: &SharedDb, secret: &str, payload: &[u8], sig: &str) -> WebhookOutcome {
-    if !verify_webhook_signature(secret, payload, sig) {
-        tracing::warn!("billing: webhook signature verification failed");
-        return outcome(400, "invalid signature\n");
+    if let Err(out) = verify_signature_or_fail(secret, payload, sig) {
+        return out;
     }
-    #[derive(serde::Deserialize)]
-    struct Event {
-        #[serde(rename = "type")]
-        ty: String,
-        data: EventData,
-    }
-    #[derive(serde::Deserialize)]
-    struct EventData {
-        object: serde_json::Value,
-    }
-    let ev: Event = match serde_json::from_slice(payload) {
+    let ev = match parse_event(payload) {
         Ok(e) => e,
-        Err(_) => return outcome(400, "bad payload\n"),
+        Err(out) => return out,
     };
     match ev.ty.as_str() {
-        "checkout.session.completed" => {
-            #[derive(serde::Deserialize)]
-            struct Obj {
-                client_reference_id: String,
-                customer: String,
-                subscription: String,
-            }
-            let obj: Obj = match serde_json::from_value(ev.data.object) {
-                Ok(o) => o,
-                Err(_) => return outcome(400, "bad event object\n"),
-            };
-            if let Err(e) = on_checkout_completed(
-                db,
-                &obj.client_reference_id,
-                &obj.customer,
-                &obj.subscription,
-            ) {
-                tracing::error!("billing: checkout.session.completed: {e}");
-                return outcome(500, "processing error\n");
-            }
-        }
-        "customer.subscription.deleted" => {
-            #[derive(serde::Deserialize)]
-            struct Obj {
-                id: String,
-                customer: String,
-            }
-            let obj: Obj = match serde_json::from_value(ev.data.object) {
-                Ok(o) => o,
-                Err(_) => return outcome(400, "bad event object\n"),
-            };
-            match on_subscription_deleted(db, &obj.customer, &obj.id) {
-                Ok(DeleteResult::Updated) => {}
-                // delta 6: unknown subscription → 200 {"ignored":true} (stops Stripe retry storms).
-                Ok(DeleteResult::UnknownSubscription) => return outcome(200, "{\"ignored\":true}"),
-                Err(e) => {
-                    tracing::error!("billing: customer.subscription.deleted: {e}");
-                    return outcome(500, "processing error\n");
-                }
-            }
-        }
+        "checkout.session.completed" => handle_checkout_completed(db, ev.data.object),
+        "customer.subscription.deleted" => handle_subscription_deleted(db, ev.data.object),
         // Unknown event types: 200 ack, no state change (spec §5.2, as Go).
-        _ => {}
+        _ => outcome(200, ""),
+    }
+}
+
+fn verify_signature_or_fail(secret: &str, payload: &[u8], sig: &str) -> Result<(), WebhookOutcome> {
+    if verify_webhook_signature(secret, payload, sig) {
+        Ok(())
+    } else {
+        tracing::warn!("billing: webhook signature verification failed");
+        Err(outcome(400, "invalid signature\n"))
+    }
+}
+
+fn parse_event(payload: &[u8]) -> Result<Event, WebhookOutcome> {
+    serde_json::from_slice(payload).map_err(|_| outcome(400, "bad payload\n"))
+}
+
+fn handle_checkout_completed(db: &SharedDb, object: serde_json::Value) -> WebhookOutcome {
+    #[derive(serde::Deserialize)]
+    struct Obj {
+        client_reference_id: String,
+        customer: String,
+        subscription: String,
+    }
+    let obj: Obj = match serde_json::from_value(object) {
+        Ok(o) => o,
+        Err(_) => return outcome(400, "bad event object\n"),
+    };
+    if let Err(e) = on_checkout_completed(
+        db,
+        &obj.client_reference_id,
+        &obj.customer,
+        &obj.subscription,
+    ) {
+        tracing::error!("billing: checkout.session.completed: {e}");
+        return outcome(500, "processing error\n");
     }
     outcome(200, "")
+}
+
+fn handle_subscription_deleted(db: &SharedDb, object: serde_json::Value) -> WebhookOutcome {
+    #[derive(serde::Deserialize)]
+    struct Obj {
+        id: String,
+        customer: String,
+    }
+    let obj: Obj = match serde_json::from_value(object) {
+        Ok(o) => o,
+        Err(_) => return outcome(400, "bad event object\n"),
+    };
+    match on_subscription_deleted(db, &obj.customer, &obj.id) {
+        Ok(DeleteResult::Updated) => outcome(200, ""),
+        // delta 6: unknown subscription → 200 {"ignored":true} (stops Stripe retry storms).
+        Ok(DeleteResult::UnknownSubscription) => outcome(200, "{\"ignored\":true}"),
+        Err(e) => {
+            tracing::error!("billing: customer.subscription.deleted: {e}");
+            outcome(500, "processing error\n")
+        }
+    }
 }
 
 /// webhook.go onCheckoutCompleted: upsert keyed on stripe_subscription_id
@@ -313,5 +331,158 @@ mod tests {
             !verify_webhook_signature("s", payload, "t=0,v1=00"),
             "missing/garbage header rejected"
         );
+    }
+
+    const TEST_WEBHOOK_SECRET: &str = "whsec_testsecret";
+
+    fn test_db() -> (tempfile::TempDir, SharedDb) {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test.db");
+        {
+            let conn = crate::db::open(path.to_str().unwrap()).unwrap();
+            crate::db::migrate(&conn).unwrap();
+        }
+        let shared = crate::db::open_shared(path.to_str().unwrap()).unwrap();
+        (dir, shared)
+    }
+
+    fn seed_user(db: &SharedDb) {
+        let conn = db.lock().unwrap();
+        conn.execute(
+            "INSERT INTO users (id, oidc_sub, email, display_name, groups, premium, created_at)
+             VALUES ('u1', 'sub-1', 'a@b.c', 'Alice', '[]', 0, datetime('now'))",
+            [],
+        )
+        .unwrap();
+    }
+
+    fn sign_payload(secret: &str, payload: &[u8], ts: i64) -> String {
+        use hmac::Mac;
+        let mut mac = HmacSha256::new_from_slice(secret.as_bytes()).unwrap();
+        mac.update(format!("{ts}.").as_bytes());
+        mac.update(payload);
+        hex::encode(mac.finalize().into_bytes())
+    }
+
+    fn signed_header(secret: &str, payload: &[u8]) -> String {
+        let ts = time::OffsetDateTime::now_utc().unix_timestamp();
+        format!("t={ts},v1={}", sign_payload(secret, payload, ts))
+    }
+
+    fn completed_payload(user: &str, customer: &str, subscription: &str) -> Vec<u8> {
+        serde_json::json!({
+            "id": "evt_1",
+            "type": "checkout.session.completed",
+            "data": {"object": {"client_reference_id": user, "customer": customer, "subscription": subscription}},
+        })
+        .to_string()
+        .into_bytes()
+    }
+
+    fn deleted_payload(customer: &str, subscription: &str) -> Vec<u8> {
+        serde_json::json!({
+            "id": "evt_2",
+            "type": "customer.subscription.deleted",
+            "data": {"object": {"id": subscription, "customer": customer}},
+        })
+        .to_string()
+        .into_bytes()
+    }
+
+    #[test]
+    fn webhook_rejects_bad_payload() {
+        let (_d, db) = test_db();
+        let payload = b"not json";
+        let out = handle_webhook(
+            &db,
+            TEST_WEBHOOK_SECRET,
+            payload,
+            &signed_header(TEST_WEBHOOK_SECRET, payload),
+        );
+        assert_eq!(out.status, 400);
+        assert_eq!(out.body, "bad payload\n");
+    }
+
+    #[test]
+    fn webhook_checkout_rejects_bad_object() {
+        let (_d, db) = test_db();
+        let payload = serde_json::json!({
+            "id": "evt_1",
+            "type": "checkout.session.completed",
+            "data": {"object": {"customer": "cus_1"}}
+        })
+        .to_string()
+        .into_bytes();
+        let out = handle_webhook(
+            &db,
+            TEST_WEBHOOK_SECRET,
+            &payload,
+            &signed_header(TEST_WEBHOOK_SECRET, &payload),
+        );
+        assert_eq!(out.status, 400);
+        assert_eq!(out.body, "bad event object\n");
+    }
+
+    #[test]
+    fn webhook_checkout_processing_error() {
+        let (_d, db) = test_db();
+        seed_user(&db);
+        // The user referenced by the event does not exist, so the subscriptions
+        // foreign-key constraint fails during insert.
+        let payload = completed_payload("no_such_user", "cus_1", "sub_1");
+        let out = handle_webhook(
+            &db,
+            TEST_WEBHOOK_SECRET,
+            &payload,
+            &signed_header(TEST_WEBHOOK_SECRET, &payload),
+        );
+        assert_eq!(out.status, 500);
+        assert_eq!(out.body, "processing error\n");
+    }
+
+    #[test]
+    fn webhook_subscription_rejects_bad_object() {
+        let (_d, db) = test_db();
+        let payload = serde_json::json!({
+            "id": "evt_2",
+            "type": "customer.subscription.deleted",
+            "data": {"object": {"id": "sub_1"}}
+        })
+        .to_string()
+        .into_bytes();
+        let out = handle_webhook(
+            &db,
+            TEST_WEBHOOK_SECRET,
+            &payload,
+            &signed_header(TEST_WEBHOOK_SECRET, &payload),
+        );
+        assert_eq!(out.status, 400);
+        assert_eq!(out.body, "bad event object\n");
+    }
+
+    #[test]
+    fn webhook_subscription_processing_error() {
+        let (_d, db) = test_db();
+        seed_user(&db);
+        {
+            let conn = db.lock().unwrap();
+            conn.execute(
+                "INSERT INTO subscriptions (id, user_id, stripe_customer_id, stripe_subscription_id, status)
+                 VALUES ('s1', 'u1', 'cus_1', 'sub_1', 'active')",
+                [],
+            )
+            .unwrap();
+        }
+        // The event customer does not match the stored subscription customer,
+        // so set_premium finds no user and errors.
+        let payload = deleted_payload("cus_2", "sub_1");
+        let out = handle_webhook(
+            &db,
+            TEST_WEBHOOK_SECRET,
+            &payload,
+            &signed_header(TEST_WEBHOOK_SECRET, &payload),
+        );
+        assert_eq!(out.status, 500);
+        assert_eq!(out.body, "processing error\n");
     }
 }

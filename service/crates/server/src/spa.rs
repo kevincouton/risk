@@ -91,4 +91,28 @@ mod tests {
             "path traversal rejected"
         );
     }
+
+    #[test]
+    fn content_type_table() {
+        let cases = [
+            ("index.html", "text/html; charset=utf-8"),
+            ("app.js", "text/javascript; charset=utf-8"),
+            ("app.css", "text/css; charset=utf-8"),
+            ("data.json", "application/json"),
+            ("bundle.js.map", "application/json"),
+            ("logo.svg", "image/svg+xml"),
+            ("logo.png", "image/png"),
+            ("favicon.ico", "image/x-icon"),
+            ("font.woff2", "font/woff2"),
+            ("binary.dat", "application/octet-stream"),
+            ("no_extension", "application/octet-stream"),
+        ];
+        for (path, expected) in cases {
+            assert_eq!(
+                content_type(Path::new(path)),
+                expected,
+                "content_type for {path}"
+            );
+        }
+    }
 }
