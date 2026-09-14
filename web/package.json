@@ -33,7 +33,7 @@
     "@voidzero-dev/vite-plus-core": "^0.1.24",
     "@voidzero-dev/vite-plus-test": "^0.1.24",
     "@vue/test-utils": "^2.4.11",
-    "happy-dom": "^20.10.2",
+    "happy-dom": "^20.14.0",
     "jsdom": "^29.1.1",
     "vite-plus": "^0.1.24"
   },
