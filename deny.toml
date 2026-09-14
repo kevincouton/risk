@@ -1,0 +1,70 @@
+# cargo-deny configuration for the risk repo (service/ workspace + collectors/).
+# Repo ships no LICENSE file; allow-list covers the permissive licenses used by
+# the Rust ecosystem. Tighten if a LICENSE is added.
+
+[advisories]
+# Fetch the RustSec advisory DB (default). Known advisories below all stem from
+# reqwest 0.11 / rustls 0.21 in the chassis, whose upgrade is a tracked
+# follow-up; ignoring these IDs keeps NEW advisories failing CI.
+unmaintained = "workspace"
+yanked = "deny"
+ignore = [
+  # rustls-webpki 0.101.7 via rustls 0.21 via reqwest 0.11
+  "RUSTSEC-2026-0098",
+  "RUSTSEC-2026-0099",
+  "RUSTSEC-2026-0104",
+  "RUSTSEC-2026-0105",
+  # rsa Marvin Attack via sqlx/openidconnect chain
+  "RUSTSEC-2023-0071",
+  # h2 via hyper/reqwest
+  "RUSTSEC-2026-0258",
+  # rustls-pemfile unmaintained via rustls 0.21 chain
+  "RUSTSEC-2025-0134",
+]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "warn"
+highlight = "all"
+
+[licenses]
+# First-party crates are publish = false and covered by licenses.private below.
+allow = [
+  "MIT",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "Zlib",
+  "Unicode-DFS-2016",
+  "Unicode-3.0",
+  "MPL-2.0",
+  "CC0-1.0",
+  "OpenSSL",
+]
+
+# First-party crates (publish = false, never released) — skip license check.
+[licenses.private]
+ignore = true
+
+# stdx git-pinned crates carry no license field in their manifests; license
+# texts live in the stdx repo (MIT-style: LICENSE.txt / LICENSE-MIT0).
+[[licenses.clarify]]
+crate = "base64@0.1.0"
+expression = "MIT"
+license-files = [{ path = "../LICENSE.txt", hash = 0x00000000 }]
+
+[[licenses.clarify]]
+crate = "constant_time_eq@0.1.0"
+expression = "MIT"
+license-files = [{ path = "LICENSE-MIT0", hash = 0x00000000 }]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-git = [
+  # Rev-pinned chassis deps, see AGENTS.md / service/SERVER_SHELL.md (tracked follow-up: vendor or upstream).
+  "https://github.com/tokio-rs/topcoat",
+  "https://github.com/rust-stdx/stdx",
+]
