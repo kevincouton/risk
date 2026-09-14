@@ -9,17 +9,21 @@
 unmaintained = "workspace"
 yanked = "deny"
 ignore = [
-  # rustls-webpki 0.101.7 via rustls 0.21 via reqwest 0.11
+  # rustls-webpki 0.101.7 via rustls 0.21 via reqwest 0.11 (still pulled in by
+  # chassis -> openidconnect/oauth2 after collectors moved to reqwest 0.12;
+  # verified present in both service/ and collectors/ lockfiles).
   "RUSTSEC-2026-0098",
   "RUSTSEC-2026-0099",
   "RUSTSEC-2026-0104",
-  "RUSTSEC-2026-0105",
-  # rsa Marvin Attack via sqlx/openidconnect chain
+  # rsa Marvin Attack via sqlx/openidconnect chain (unrelated to reqwest).
   "RUSTSEC-2023-0071",
-  # h2 via hyper/reqwest
+  # h2 0.3 via hyper 0.14/reqwest 0.11 (chassis chain, same follow-up as above).
   "RUSTSEC-2026-0258",
-  # rustls-pemfile unmaintained via rustls 0.21 chain
-  "RUSTSEC-2025-0134",
+  # Removed 2026-09-14 with the reqwest 0.12 upgrade, confirmed not detected in
+  # either lockfile: RUSTSEC-2026-0105 (core2 unmaintained; core2 absent from
+  # both lockfiles) and RUSTSEC-2025-0134 (rustls-pemfile unmaintained;
+  # informational/unmaintained advisories are scoped to workspace crates by
+  # unmaintained = "workspace", so transitive rustls-pemfile never triggers it).
 ]
 
 [bans]
@@ -42,6 +46,8 @@ allow = [
   "MPL-2.0",
   "CC0-1.0",
   "OpenSSL",
+  # webpki-roots 1.x via reqwest 0.12 (permissive data license for the Mozilla root bundle)
+  "CDLA-Permissive-2.0",
 ]
 
 # First-party crates (publish = false, never released) — skip license check.
