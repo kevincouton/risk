@@ -11,7 +11,7 @@ constant_time_eq = { git = "https://github.com/rust-stdx/stdx", rev = "c83000f05
 dotenvy = "0.15"
 hex = "0.4"
 hmac = "0.12"
-openidconnect = "=3.5.0" # default features (reqwest 0.11 + rustls-tls)
+openidconnect = "=4.0.1" # default features (reqwest 0.11 + rustls-tls)
 rand = "0.9"
 # reqwest pinned to 0.11 to match openidconnect 3.5.0's async_http_client
 # (single reqwest in the tree; R-3 coordination note).
