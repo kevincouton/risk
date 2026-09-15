@@ -12,7 +12,7 @@ serde_json = "1"
 reqwest = { version = "0.12.28", default-features = false, features = ["blocking", "rustls-tls", "json"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
-hotpath = { version = "0.23", optional = true }
+hotpath = { version = "0.25", optional = true }
 
 [features]
 # hotpath/hotpath enables the actual profiler; dep:hotpath alone leaves the macros as no-ops.
