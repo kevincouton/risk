@@ -100,7 +100,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - uses: taiki-e/install-action@c02248eec042a8a90b2335f60bb37dc287b54068 # cargo-deny
+      - uses: taiki-e/install-action@212e92b595ceefa6daaad2cda95b921ed5da4cd4 # cargo-deny
         with:
           tool: cargo-deny@0.19.9
       - name: cargo-deny (service workspace)
