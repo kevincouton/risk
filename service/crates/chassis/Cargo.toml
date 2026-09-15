@@ -10,7 +10,7 @@ base64 = { git = "https://github.com/rust-stdx/stdx", rev = "c83000f05a084527033
 constant_time_eq = { git = "https://github.com/rust-stdx/stdx", rev = "c83000f05a084527033e8b884fb21ea07de80ab8" }
 dotenvy = "0.15"
 hex = "0.4"
-hmac = "0.12"
+hmac = "0.13"
 openidconnect = "=4.0.1" # oauth2 5 re-exports reqwest 0.12; its Client implements AsyncHttpClient
 rand = "0.9"
 # reqwest 0.12 matches openidconnect 4.0.1's oauth2 5 re-export (single reqwest
