@@ -1,8 +1,8 @@
 [package]
 name = "chassis"
 version = "0.1.0"
-publish = false
 edition = "2021"
+publish = false
 
 [dependencies]
 anyhow = "1"
@@ -11,11 +11,12 @@ constant_time_eq = { git = "https://github.com/rust-stdx/stdx", rev = "c83000f05
 dotenvy = "0.15"
 hex = "0.4"
 hmac = "0.12"
-openidconnect = "=3.5.0" # default features (reqwest 0.11 + rustls-tls)
+openidconnect = "=4.0.1" # oauth2 5 re-exports reqwest 0.12; its Client implements AsyncHttpClient
 rand = "0.9"
-# reqwest pinned to 0.11 to match openidconnect 3.5.0's async_http_client
-# (single reqwest in the tree; R-3 coordination note).
-reqwest = { version = "0.11", default-features = false, features = ["blocking", "rustls-tls", "json"] }
+# reqwest 0.12 matches openidconnect 4.0.1's oauth2 5 re-export (single reqwest
+# in the tree; R-3 coordination note). rustls-tls here also covers the
+# openidconnect::reqwest re-export, which oauth2 pulls with no TLS feature.
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls", "json"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

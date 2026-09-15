@@ -1,0 +1,61 @@
+# cargo-deny configuration for the service template workspace.
+# Synced to instantiated clones via sync-manifest.txt.
+
+[advisories]
+yanked = "deny"
+# Accepted risk, still present after the openidconnect 4.0.1 / reqwest 0.12
+# upgrade (rustls 0.23 / hyper 1.x / h2 0.4 — the rustls 0.21, webpki 0.101,
+# h2 0.3, and rustls-pemfile ignores were cleared by that upgrade).
+ignore = [
+    # rsa 0.9.10 (via openidconnect 4.0.1, latest 4.x): Marvin timing
+    # sidechannel; no upstream fix. Verified via `cargo tree -i rsa`.
+    "RUSTSEC-2023-0071",
+]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "warn"
+# Git-sourced deps (topcoat, stdx rev pins — see SERVER_SHELL.md R-0) are a
+# known, tracked exception to the crates.io-only rule; do not deny git sources
+# here until the vendoring/publishing follow-up lands.
+highlight = "all"
+
+[licenses]
+# Repo is proprietary (all rights reserved, see LICENSE); this allow-list covers
+# the permissive licenses of third-party dependencies.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "CC0-1.0",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "0BSD",
+    # webpki-roots 1.x (Mozilla roots bundle, via hyper-rustls 0.27).
+    "CDLA-Permissive-2.0",
+]
+# Workspace crates (chassis, server) are not published anywhere.
+private = { ignore = true }
+
+# rust-stdx/stdx's base64 crate carries no license metadata; the stdx repo is
+# MIT-licensed (https://github.com/rust-stdx/stdx). This is the git-pinned stdx
+# base64 0.1.0, not the crates.io base64.
+[[licenses.clarify]]
+name = "base64"
+version = "0.1.0"
+expression = "MIT"
+license-files = [{ path = "../LICENSE.txt", hash = 0x15504f92 }]
+
+[sources]
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = [
+    # Rev-pinned chassis deps (R-0, service/SERVER_SHELL.md); tracked follow-up
+    # to vendor or publish upstream.
+    "https://github.com/tokio-rs/topcoat",
+    "https://github.com/rust-stdx/stdx",
+]
+unknown-registry = "deny"
+unknown-git = "deny"

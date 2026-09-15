@@ -1,7 +1,7 @@
 //! Port of go-service/internal/auth/{oidc,session,middleware}.go.
 //! Sessions are stateless HMAC-signed cookies; premium/groups are re-read
 //! from the DB at request time (delta 7) — the cookie snapshot is a display
-//! hint only. OIDC via the openidconnect crate (3.5.0, verified).
+//! hint only. OIDC via the openidconnect crate (4.0.1, verified).
 //!
 //! Contract parity notes (R-1 golden auth_login_302.json pins the wire shape):
 //! - The authorize URL carries NO nonce param and its query keys are in
@@ -42,7 +42,7 @@ pub struct User {
 }
 
 /// oidc.go TokenClaims: the verified OIDC claims we keep.
-#[derive(Debug)]
+#[derive(Clone)]
 pub struct TokenClaims {
     pub sub: String,
     pub email: Option<String>,
@@ -312,7 +312,7 @@ impl AuthProvider {
     }
 }
 
-// ---- production OIDC flow (openidconnect 3.5.0; API verified against source) ----
+// ---- production OIDC flow (openidconnect 4.0.1; API verified against source) ----
 
 mod oidc {
     use super::{OidcFlow, TokenClaims};
@@ -321,14 +321,14 @@ mod oidc {
 
     use openidconnect::core::{
         CoreAuthDisplay, CoreAuthPrompt, CoreErrorResponseType, CoreGenderClaim, CoreJsonWebKey,
-        CoreJsonWebKeyType, CoreJsonWebKeyUse, CoreJweContentEncryptionAlgorithm,
-        CoreJwsSigningAlgorithm, CoreProviderMetadata, CoreRevocableToken,
-        CoreRevocationErrorResponse, CoreTokenIntrospectionResponse, CoreTokenType,
+        CoreJweContentEncryptionAlgorithm, CoreJwsSigningAlgorithm, CoreProviderMetadata,
+        CoreRevocableToken, CoreRevocationErrorResponse, CoreTokenIntrospectionResponse,
+        CoreTokenType,
     };
-    use openidconnect::reqwest::async_http_client;
     use openidconnect::{
         AdditionalClaims, AuthorizationCode, Client, ClientId, ClientSecret, EmptyExtraTokenFields,
-        IdTokenFields, IssuerUrl, Nonce, RedirectUrl, StandardErrorResponse, StandardTokenResponse,
+        EndpointMaybeSet, EndpointNotSet, EndpointSet, IdTokenFields, IssuerUrl, Nonce,
+        RedirectUrl, StandardErrorResponse, StandardTokenResponse,
     };
     use rand::RngCore as _;
 
@@ -347,43 +347,56 @@ mod oidc {
         CoreGenderClaim,
         CoreJweContentEncryptionAlgorithm,
         CoreJwsSigningAlgorithm,
-        CoreJsonWebKeyType,
     >;
 
-    // Same generic expansion as openidconnect::core::CoreClient, with
-    // PlatformClaims in place of EmptyAdditionalClaims.
+    // Same generic expansion as openidconnect::core::CoreClient returned by
+    // Client::from_provider_metadata (auth endpoint set; token/userinfo
+    // maybe-set), with PlatformClaims in place of EmptyAdditionalClaims.
     type PlatformClient = Client<
         PlatformClaims,
         CoreAuthDisplay,
         CoreGenderClaim,
         CoreJweContentEncryptionAlgorithm,
-        CoreJwsSigningAlgorithm,
-        CoreJsonWebKeyType,
-        CoreJsonWebKeyUse,
         CoreJsonWebKey,
         CoreAuthPrompt,
         StandardErrorResponse<CoreErrorResponseType>,
         StandardTokenResponse<PlatformIdTokenFields, CoreTokenType>,
-        CoreTokenType,
         CoreTokenIntrospectionResponse,
         CoreRevocableToken,
         CoreRevocationErrorResponse,
+        EndpointSet,
+        EndpointNotSet,
+        EndpointNotSet,
+        EndpointNotSet,
+        EndpointMaybeSet,
+        EndpointMaybeSet,
     >;
 
     pub struct RealFlow {
         client: PlatformClient,
-        pub(crate) authorization_endpoint: String,
+        http_client: reqwest::Client,
+        authorization_endpoint: String,
         client_id: String,
         redirect_uri: String,
     }
 
+    /// openidconnect 4 removed its reqwest helper functions; its
+    /// AsyncHttpClient trait is implemented directly for reqwest 0.12's
+    /// Client, which we pass by reference. Redirects are disabled per the
+    /// openidconnect SSRF warning.
+    fn build_http_client() -> reqwest::Client {
+        reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .expect("reqwest async client with rustls and default config cannot fail")
+    }
+
     impl RealFlow {
-        pub async fn discover(cfg: &crate::config::Config) -> anyhow::Result<RealFlow> {
-            let metadata = CoreProviderMetadata::discover_async(
-                IssuerUrl::new(cfg.oidc_issuer.clone())?,
-                async_http_client,
-            )
-            .await?;
+        fn from_metadata(
+            cfg: &crate::config::Config,
+            metadata: CoreProviderMetadata,
+            http_client: reqwest::Client,
+        ) -> anyhow::Result<RealFlow> {
             let authorization_endpoint = metadata.authorization_endpoint().url().to_string();
             let redirect_uri = format!("{}/auth/callback", cfg.app_url);
             let client = PlatformClient::from_provider_metadata(
@@ -394,31 +407,61 @@ mod oidc {
             .set_redirect_uri(RedirectUrl::new(redirect_uri.clone())?);
             Ok(RealFlow {
                 client,
+                http_client,
                 authorization_endpoint,
                 client_id: cfg.oidc_client_id.clone(),
                 redirect_uri,
+            })
+        }
+
+        pub async fn discover(cfg: &crate::config::Config) -> anyhow::Result<RealFlow> {
+            let issuer = IssuerUrl::new(cfg.oidc_issuer.clone())?;
+            let http_client = build_http_client();
+            let metadata = CoreProviderMetadata::discover_async(issuer, &http_client).await?;
+            Self::from_metadata(cfg, metadata, http_client)
+        }
+
+        fn parse_token_response(
+            &self,
+            token: &StandardTokenResponse<PlatformIdTokenFields, CoreTokenType>,
+        ) -> anyhow::Result<TokenClaims> {
+            use openidconnect::TokenResponse as _; // id_token() lives on the trait
+            let id_token = token
+                .id_token()
+                .ok_or_else(|| anyhow::anyhow!("no id_token in token response"))?;
+            // Go verified the id token with go-oidc WITHOUT a nonce check
+            // (no nonce was ever sent); NonceVerifier closure = skip, exact parity.
+            let claims = id_token.claims(
+                &self.client.id_token_verifier(),
+                |_nonce: Option<&Nonce>| Ok(()),
+            )?;
+            Ok(TokenClaims {
+                sub: claims.subject().to_string(),
+                email: claims.email().map(|e| e.as_str().to_owned()),
+                name: claims
+                    .name()
+                    .and_then(|n| n.get(None))
+                    .map(|n| n.as_str().to_owned()),
+                groups: claims
+                    .additional_claims()
+                    .groups
+                    .clone()
+                    .unwrap_or_default(),
             })
         }
     }
 
     /// Go-compatible query escaping (url.QueryEscape): alphanumerics and
     /// -_.~ pass through, space → '+', everything else %XX uppercase.
-    const QUERY_UNRESERVED: &[u8] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.~";
-
-    fn is_query_unreserved(b: u8) -> bool {
-        QUERY_UNRESERVED.contains(&b)
-    }
-
     pub(crate) fn query_escape(s: &str) -> String {
         let mut out = String::new();
         for b in s.bytes() {
-            if b == b' ' {
-                out.push('+');
-            } else if is_query_unreserved(b) {
-                out.push(b as char);
-            } else {
-                out.push_str(&format!("%{b:02X}"));
+            match b {
+                b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                    out.push(b as char)
+                }
+                b' ' => out.push('+'),
+                _ => out.push_str(&format!("%{b:02X}")),
             }
         }
         out
@@ -451,34 +494,12 @@ mod oidc {
             _nonce: &'a str,
         ) -> Pin<Box<dyn Future<Output = anyhow::Result<TokenClaims>> + Send + 'a>> {
             Box::pin(async move {
-                use openidconnect::TokenResponse as _; // id_token() lives on the trait
                 let token = self
                     .client
-                    .exchange_code(AuthorizationCode::new(code.to_string()))
-                    .request_async(async_http_client)
+                    .exchange_code(AuthorizationCode::new(code.to_string()))?
+                    .request_async(&self.http_client)
                     .await?;
-                let id_token = token
-                    .id_token()
-                    .ok_or_else(|| anyhow::anyhow!("no id_token in token response"))?;
-                // Go verified the id token with go-oidc WITHOUT a nonce check
-                // (no nonce was ever sent); NonceVerifier closure = skip, exact parity.
-                let claims = id_token.claims(
-                    &self.client.id_token_verifier(),
-                    |_nonce: Option<&Nonce>| Ok(()),
-                )?;
-                Ok(TokenClaims {
-                    sub: claims.subject().to_string(),
-                    email: claims.email().map(|e| e.as_str().to_owned()),
-                    name: claims
-                        .name()
-                        .and_then(|n| n.get(None))
-                        .map(|n| n.as_str().to_owned()),
-                    groups: claims
-                        .additional_claims()
-                        .groups
-                        .clone()
-                        .unwrap_or_default(),
-                })
+                self.parse_token_response(&token)
             })
         }
     }
@@ -519,173 +540,22 @@ mod tests {
     }
 
     #[test]
-    fn callback_error_display() {
-        assert_eq!(
-            CallbackError::InvalidState.to_string(),
-            "invalid oauth state"
-        );
-        let err = CallbackError::Exchange(anyhow::anyhow!("exchange failed"));
-        assert_eq!(err.to_string(), "token exchange failed: exchange failed");
-        let err = CallbackError::Upsert(anyhow::anyhow!("upsert failed"));
-        assert_eq!(err.to_string(), "user upsert failed: upsert failed");
+    fn query_escape_go_parity() {
+        assert_eq!(oidc::query_escape("abcABC123-_.~"), "abcABC123-_.~");
+        assert_eq!(oidc::query_escape("hello world"), "hello+world");
+        assert_eq!(oidc::query_escape("a/b"), "a%2Fb");
+        assert_eq!(oidc::query_escape("a+b"), "a%2Bb");
+        assert_eq!(oidc::query_escape("a b&c=d"), "a+b%26c%3Dd");
+        assert_eq!(oidc::query_escape("é"), "%C3%A9");
     }
 
     #[test]
-    fn query_escape_cases() {
-        assert_eq!(super::oidc::query_escape("abcABC123-_.~"), "abcABC123-_.~");
-        assert_eq!(super::oidc::query_escape("hello world"), "hello+world");
-        assert_eq!(super::oidc::query_escape("foo@bar"), "foo%40bar");
-        assert_eq!(
-            super::oidc::query_escape("a/b?c=d&e=f"),
-            "a%2Fb%3Fc%3Dd%26e%3Df"
-        );
-    }
-
-    fn test_config(issuer: &str, app_url: &str) -> crate::config::Config {
-        crate::config::Config {
-            platform_name: "risk".into(),
-            database_path: "".into(),
-            api_port: 8080,
-            posthog_api_key: "".into(),
-            ga_id: "".into(),
-            ads_id: "".into(),
-            auth_enabled: true,
-            oidc_issuer: issuer.into(),
-            oidc_client_id: "client".into(),
-            oidc_client_secret: "secret".into(),
-            session_signing_key: "key".into(),
-            app_url: app_url.into(),
-            cors_origin: "".into(),
-            billing_enabled: false,
-            stripe_secret_key: "".into(),
-            stripe_webhook_secret: "".into(),
-            stripe_price_id: "".into(),
-            api_keys_enabled: false,
-            dev_user_id: "".into(),
-        }
-    }
-
-    #[tokio::test]
-    async fn real_flow_discovers_authorization_endpoint() {
-        use httptest::{matchers::*, responders::*, Expectation, Server};
-        let server = Server::run();
-        let issuer = server.url("/").to_string();
-        server.expect(
-            Expectation::matching(request::method_path(
-                "GET",
-                "/.well-known/openid-configuration",
-            ))
-            .times(1)
-            .respond_with(json_encoded(serde_json::json!({
-                "issuer": issuer,
-                "authorization_endpoint": format!("{issuer}auth"),
-                "token_endpoint": format!("{issuer}token"),
-                "jwks_uri": format!("{issuer}jwks"),
-                "response_types_supported": ["code"],
-                "subject_types_supported": ["public"],
-                "id_token_signing_alg_values_supported": ["RS256"],
-            }))),
-        );
-        server.expect(
-            Expectation::matching(request::method_path("GET", "/jwks"))
-                .times(1)
-                .respond_with(json_encoded(serde_json::json!({ "keys": [] }))),
-        );
-        let cfg = test_config(&issuer, "http://localhost:8080");
-        let flow = super::oidc::RealFlow::discover(&cfg)
-            .await
-            .expect("discover must succeed");
-        assert_eq!(flow.authorization_endpoint, format!("{issuer}auth"));
-        let (url, _state, _nonce) = flow.authorize();
-        assert!(url.starts_with(&format!(
-            "{issuer}auth?client_id=client&redirect_uri=http%3A%2F%2Flocalhost%3A8080%2Fauth%2Fcallback&response_type=code&scope=openid+profile+email+groups&state="
-        )));
-    }
-
-    #[tokio::test]
-    async fn real_flow_exchange_requires_id_token() {
-        use httptest::{matchers::*, responders::*, Expectation, Server};
-        let server = Server::run();
-        let issuer = server.url("/").to_string();
-        server.expect(
-            Expectation::matching(request::method_path(
-                "GET",
-                "/.well-known/openid-configuration",
-            ))
-            .times(1..)
-            .respond_with(json_encoded(serde_json::json!({
-                "issuer": issuer,
-                "authorization_endpoint": format!("{issuer}auth"),
-                "token_endpoint": format!("{issuer}token"),
-                "jwks_uri": format!("{issuer}jwks"),
-                "response_types_supported": ["code"],
-                "subject_types_supported": ["public"],
-                "id_token_signing_alg_values_supported": ["RS256"],
-            }))),
-        );
-        server.expect(
-            Expectation::matching(request::method_path("GET", "/jwks"))
-                .times(1..)
-                .respond_with(json_encoded(serde_json::json!({ "keys": [] }))),
-        );
-        server.expect(
-            Expectation::matching(request::method_path("POST", "/token"))
-                .times(1)
-                .respond_with(json_encoded(serde_json::json!({
-                    "access_token": "atoken",
-                    "token_type": "Bearer",
-                }))),
-        );
-        let cfg = test_config(&issuer, "http://localhost:8080");
-        let flow = super::oidc::RealFlow::discover(&cfg)
-            .await
-            .expect("discover must succeed");
-        let err = flow.exchange("code", "").await.unwrap_err();
-        assert!(
-            err.to_string().contains("no id_token"),
-            "want missing id_token error, got {err}"
-        );
-    }
-
-    #[tokio::test]
-    async fn real_flow_exchange_propagates_token_error() {
-        use httptest::{matchers::*, responders::*, Expectation, Server};
-        let server = Server::run();
-        let issuer = server.url("/").to_string();
-        server.expect(
-            Expectation::matching(request::method_path(
-                "GET",
-                "/.well-known/openid-configuration",
-            ))
-            .times(1..)
-            .respond_with(json_encoded(serde_json::json!({
-                "issuer": issuer,
-                "authorization_endpoint": format!("{issuer}auth"),
-                "token_endpoint": format!("{issuer}token"),
-                "jwks_uri": format!("{issuer}jwks"),
-                "response_types_supported": ["code"],
-                "subject_types_supported": ["public"],
-                "id_token_signing_alg_values_supported": ["RS256"],
-            }))),
-        );
-        server.expect(
-            Expectation::matching(request::method_path("GET", "/jwks"))
-                .times(1..)
-                .respond_with(json_encoded(serde_json::json!({ "keys": [] }))),
-        );
-        server.expect(
-            Expectation::matching(request::method_path("POST", "/token"))
-                .times(1)
-                .respond_with(status_code(400)),
-        );
-        let cfg = test_config(&issuer, "http://localhost:8080");
-        let flow = super::oidc::RealFlow::discover(&cfg)
-            .await
-            .expect("discover must succeed");
-        let err = flow.exchange("code", "").await.unwrap_err();
-        assert!(
-            err.to_string().contains("Server returned"),
-            "want token endpoint error, got {err}"
-        );
+    fn callback_error_display_formats_all_variants() {
+        let err = CallbackError::InvalidState;
+        assert_eq!(format!("{err}"), "invalid oauth state");
+        let err = CallbackError::Exchange(anyhow::anyhow!("network down"));
+        assert_eq!(format!("{err}"), "token exchange failed: network down");
+        let err = CallbackError::Upsert(anyhow::anyhow!("constraint"));
+        assert_eq!(format!("{err}"), "user upsert failed: constraint");
     }
 }

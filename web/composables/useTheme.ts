@@ -48,20 +48,24 @@ export function useTheme() {
     setTheme(isDark.value ? 'light' : 'dark')
   }
 
-  onMounted(() => {
-    applyTheme(theme.value)
+  if (getCurrentInstance()) {
+    onMounted(() => {
+      applyTheme(theme.value)
 
-    const media = window.matchMedia('(prefers-color-scheme: dark)')
-    const handler = () => {
-      if (theme.value === 'system') {
-        applyTheme('system')
+      if (typeof window !== 'undefined' && window.matchMedia) {
+        const media = window.matchMedia('(prefers-color-scheme: dark)')
+        const handler = () => {
+          if (theme.value === 'system') {
+            applyTheme('system')
+          }
+        }
+        media.addEventListener('change', handler)
+        onBeforeUnmount(() => {
+          media.removeEventListener('change', handler)
+        })
       }
-    }
-    media.addEventListener('change', handler)
-    onBeforeUnmount(() => {
-      media.removeEventListener('change', handler)
     })
-  })
+  }
 
   return {
     theme: readonly(theme),

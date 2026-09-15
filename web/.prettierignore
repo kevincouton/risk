@@ -10,3 +10,5 @@ e2e
 # formatting cannot be stable both before and after instantiation.
 pages/about.vue
 pages/[[]owner[]]/[[]name[]].vue
+pages/index.vue
+layouts/default.vue

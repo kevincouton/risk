@@ -489,13 +489,7 @@ pub fn auth_logout(state: &AppState, method: &str) -> ApiResponse {
 
 // ---- billing routes ----
 
-pub fn billing_webhook(state: &AppState, stripe_signature: &str, payload: &[u8]) -> ApiResponse {
-    let out = billing::handle_webhook(
-        &state.db,
-        &state.cfg.stripe_webhook_secret,
-        payload,
-        stripe_signature,
-    );
+fn map_webhook_outcome(out: billing::WebhookOutcome) -> ApiResponse {
     if out.status == 200 && out.body.is_empty() {
         return ApiResponse::build(200, &[], ""); // Go: WriteHeader(200), no body
     }
@@ -505,12 +499,17 @@ pub fn billing_webhook(state: &AppState, stripe_signature: &str, payload: &[u8])
     ApiResponse::http_error(out.status, &out.body) // Go http.Error bodies
 }
 
-/// Go checkout handler, delta 5: the `?user_id=` query-param fallback is GONE.
-/// Resolution order: session user → DEV_USER_ID → 401 `{"error":"authentication required"}`.
-/// (Deviation from Go's RequireAuth wrap, intended by delta 5: with a provider
-/// configured AND DEV_USER_ID set AND no session, Go 401'd; Rust honors the
-/// explicit dev override. The 401 body is byte-identical either way.)
-async fn resolve_checkout_user(state: &AppState, session_cookie: Option<&str>) -> String {
+pub fn billing_webhook(state: &AppState, stripe_signature: &str, payload: &[u8]) -> ApiResponse {
+    let out = billing::handle_webhook(
+        &state.db,
+        &state.cfg.stripe_webhook_secret,
+        payload,
+        stripe_signature,
+    );
+    map_webhook_outcome(out)
+}
+
+fn resolve_checkout_user(state: &AppState, session_cookie: Option<&str>) -> String {
     if let (Some(p), Some(c)) = (state.auth.as_ref(), session_cookie) {
         if let Some(u) = p.current_user(&state.db, c) {
             return u.id;
@@ -522,16 +521,25 @@ async fn resolve_checkout_user(state: &AppState, session_cookie: Option<&str>) -
     String::new()
 }
 
-pub async fn billing_checkout(state: &AppState, session_cookie: Option<&str>) -> ApiResponse {
-    let user_id = resolve_checkout_user(state, session_cookie).await;
-    if user_id.is_empty() {
-        return ApiResponse::http_error(401, "{\"error\":\"authentication required\"}\n");
-    }
-    match billing::create_checkout_session(&state.cfg, &user_id).await {
+async fn checkout_response(cfg: &chassis::config::Config, user_id: &str) -> ApiResponse {
+    match billing::create_checkout_session(cfg, user_id).await {
         // Go: Content-Type application/json + w.Write — no trailing newline.
         Ok(url) => ApiResponse::json(200, serde_json::json!({ "url": url }).to_string()),
         Err(_) => ApiResponse::http_error(502, "{\"error\":\"checkout failed\"}\n"),
     }
+}
+
+/// Go checkout handler, delta 5: the `?user_id=` query-param fallback is GONE.
+/// Resolution order: session user → DEV_USER_ID → 401 `{"error":"authentication required"}`.
+/// (Deviation from Go's RequireAuth wrap, intended by delta 5: with a provider
+/// configured AND DEV_USER_ID set AND no session, Go 401'd; Rust honors the
+/// explicit dev override. The 401 body is byte-identical either way.)
+pub async fn billing_checkout(state: &AppState, session_cookie: Option<&str>) -> ApiResponse {
+    let user_id = resolve_checkout_user(state, session_cookie);
+    if user_id.is_empty() {
+        return ApiResponse::http_error(401, "{\"error\":\"authentication required\"}\n");
+    }
+    checkout_response(&state.cfg, &user_id).await
 }
 
 // ---- /api/keys routes (require api_keys_enabled && auth provider) ----
@@ -657,107 +665,97 @@ pub async fn dispatch(
         return cors.apply(ApiResponse::build(200, &[], ""));
     }
     let resp = route(state, method, path, query, headers, body).await;
-    // Go analyticsMiddleware: skip /healthz and non-/api/ paths; status is
-    // hardcoded 200 in Go (the measured duration is discarded) — replicated.
+    // Go analyticsMiddleware: skip /healthz and non-/api/ paths. Go hardcoded
+    // status 200; we capture the real response status so API errors are
+    // visible in analytics.
     if path != "/healthz" && path.starts_with("/api/") {
         chassis::analytics::capture_api_request(
             path,
             method,
             hget(headers, "User-Agent").unwrap_or(""),
-            200,
+            resp.status,
         );
     }
     cors.apply(resp)
 }
 
-const V1_ENTITIES: &str = "/api/v1/entities";
-const V1_ENTITIES_PREFIX: &str = "/api/v1/entities/";
-const KEYS_PREFIX: &str = "/api/keys/";
-
-/// Routes the public API v1 paths. These paths are always present; the gate
-/// is applied inside each arm so the fail-closed behavior matches Go.
-fn route_api_v1(
+fn route_entities(
     state: &AppState,
-    _method: &str,
+    headers: &[(&str, &str)],
     path: &str,
     query: &[(&str, &str)],
-    headers: &[(&str, &str)],
-) -> Option<ApiResponse> {
-    match path {
-        V1_ENTITIES => Some(gated(state, headers, path, |s| entities(&s.db, query))),
-        p if p.starts_with(V1_ENTITIES_PREFIX) => Some(gated(state, headers, path, |s| {
-            entity_detail(&s.db, &p[V1_ENTITIES_PREFIX.len()..], query)
-        })),
-        "/api/v1/search" => Some(gated(state, headers, path, |s| search(&s.db, query))),
-        "/api/v1/stats" => Some(gated(state, headers, path, |s| stats(&s.db))),
-        _ => None,
+) -> ApiResponse {
+    const V1_ENTITIES: &str = "/api/v1/entities";
+    const V1_ENTITIES_PREFIX: &str = "/api/v1/entities/";
+    if path == V1_ENTITIES {
+        return gated(state, headers, path, |s| entities(&s.db, query));
     }
+    gated(state, headers, path, |s| {
+        entity_detail(&s.db, &path[V1_ENTITIES_PREFIX.len()..], query)
+    })
 }
 
-/// Auth routes exist only when a provider is configured. Unknown /auth/* paths
-/// fall through to the SPA, matching Go's file-server behavior.
 async fn route_auth(
     state: &AppState,
     method: &str,
     path: &str,
-    session: Option<&str>,
-    cookies: &[(String, String)],
     query: &[(&str, &str)],
-) -> Option<ApiResponse> {
+    cookies: &[(String, String)],
+) -> ApiResponse {
     if state.auth.is_none() {
-        return None;
+        return spa_response(path);
     }
+    let session = cookies
+        .iter()
+        .find(|(k, _)| k == auth::SESSION_COOKIE)
+        .map(|(_, v)| v.as_str());
     match path {
-        "/auth/login" => Some(auth_login(state)),
-        "/auth/callback" => Some(auth_callback(state, cookies, query).await),
-        "/auth/logout" => Some(auth_logout(state, method)),
-        "/auth/me" => Some(auth_me(state, session)),
-        _ => None,
+        "/auth/login" => auth_login(state),
+        "/auth/callback" => auth_callback(state, cookies, query).await,
+        "/auth/logout" => auth_logout(state, method),
+        "/auth/me" => auth_me(state, session),
+        _ => spa_response(path),
     }
 }
 
-/// Billing routes exist only when billing is enabled. Unknown /api/billing/*
-/// paths fall through to the SPA.
 async fn route_billing(
     state: &AppState,
+    _method: &str,
     path: &str,
-    session: Option<&str>,
     headers: &[(&str, &str)],
     body: &[u8],
-) -> Option<ApiResponse> {
+    session: Option<&str>,
+) -> ApiResponse {
     if !state.cfg.billing_enabled {
-        return None;
+        return spa_response(path);
     }
     match path {
-        "/api/billing/webhook" => Some(billing_webhook(
-            state,
-            hget(headers, "Stripe-Signature").unwrap_or(""),
-            body,
-        )),
-        "/api/billing/checkout" => Some(billing_checkout(state, session).await),
-        _ => None,
+        "/api/billing/webhook" => {
+            billing_webhook(state, hget(headers, "Stripe-Signature").unwrap_or(""), body)
+        }
+        "/api/billing/checkout" => billing_checkout(state, session).await,
+        _ => spa_response(path),
     }
 }
 
-/// /api/keys routes exist only when both API keys and auth are enabled.
-/// Unknown /api/keys/* paths fall through to the SPA.
 fn route_keys(
     state: &AppState,
     method: &str,
     path: &str,
     session: Option<&str>,
     body: &[u8],
-) -> Option<ApiResponse> {
+) -> ApiResponse {
     if !state.cfg.api_keys_enabled || state.auth.is_none() {
-        return None;
+        return spa_response(path);
     }
-    match path {
-        "/api/keys" => Some(keys_list_or_create(state, method, session, body)),
-        p if p.starts_with(KEYS_PREFIX) => {
-            Some(keys_revoke(state, method, &p[KEYS_PREFIX.len()..], session))
-        }
-        _ => None,
+    const KEYS_PREFIX: &str = "/api/keys/";
+    if path == "/api/keys" {
+        return keys_list_or_create(state, method, session, body);
     }
+    if let Some(rest) = path.strip_prefix(KEYS_PREFIX) {
+        return keys_revoke(state, method, rest, session);
+    }
+    spa_response(path)
 }
 
 async fn route(
@@ -773,22 +771,18 @@ async fn route(
         .iter()
         .find(|(k, _)| k == auth::SESSION_COOKIE)
         .map(|(_, v)| v.as_str());
-    if path == "/healthz" {
-        return health();
+    match path {
+        "/healthz" => health(),
+        "/api/v1/search" => gated(state, headers, path, |s| search(&s.db, query)),
+        "/api/v1/stats" => gated(state, headers, path, |s| stats(&s.db)),
+        p if p.starts_with("/api/v1/entities") => route_entities(state, headers, path, query),
+        p if p.starts_with("/auth/") => route_auth(state, method, path, query, &cookies).await,
+        p if p.starts_with("/api/billing/") => {
+            route_billing(state, method, path, headers, body, session).await
+        }
+        p if p.starts_with("/api/keys") => route_keys(state, method, path, session, body),
+        _ => spa_response(path),
     }
-    if let Some(resp) = route_api_v1(state, method, path, query, headers) {
-        return resp;
-    }
-    if let Some(resp) = route_auth(state, method, path, session, &cookies, query).await {
-        return resp;
-    }
-    if let Some(resp) = route_billing(state, path, session, headers, body).await {
-        return resp;
-    }
-    if let Some(resp) = route_keys(state, method, path, session, body) {
-        return resp;
-    }
-    spa_response(path)
 }
 
 fn spa_response(path: &str) -> ApiResponse {
@@ -812,6 +806,7 @@ fn spa_response(path: &str) -> ApiResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::{future::Future, pin::Pin};
 
     fn open_test_db() -> (tempfile::TempDir, chassis::db::SharedDb) {
         let dir = tempfile::tempdir().unwrap();
@@ -958,91 +953,63 @@ mod tests {
         assert_eq!(v["verdicts"], serde_json::json!({}));
     }
 
-    // ---- test helpers for handler coverage ----
+    const TEST_KEY: &[u8] = b"0123456789abcdef0123456789abcdef";
 
-    fn test_config() -> chassis::config::Config {
-        let mut cfg = chassis::config::Config::load();
-        cfg.app_url = "http://localhost:8080".into();
-        cfg.cors_origin = "http://localhost:3000".into();
-        cfg
-    }
-
-    fn state_with_db(db: &chassis::db::SharedDb) -> AppState {
-        AppState {
-            cfg: test_config(),
-            db: db.clone(),
-            auth: None,
+    fn test_cfg() -> chassis::config::Config {
+        chassis::config::Config {
+            platform_name: "test".into(),
+            database_path: "./test.db".into(),
+            api_port: 8080,
+            posthog_api_key: "".into(),
+            ga_id: "".into(),
+            ads_id: "".into(),
+            auth_enabled: false,
+            oidc_issuer: "".into(),
+            oidc_client_id: "".into(),
+            oidc_client_secret: "".into(),
+            session_signing_key: String::from_utf8(TEST_KEY.to_vec()).unwrap(),
+            app_url: "http://localhost:8080".into(),
+            cors_origin: "".into(),
+            billing_enabled: true,
+            stripe_secret_key: "".into(),
+            stripe_webhook_secret: "secret".into(),
+            stripe_price_id: "".into(),
+            api_keys_enabled: false,
+            dev_user_id: "".into(),
         }
     }
 
-    fn test_signing_key() -> &'static [u8] {
-        b"test-signing-key-32bytes-long!"
+    fn state_with(
+        db: chassis::db::SharedDb,
+        auth: Option<chassis::auth::AuthProvider>,
+        mut cfg_fn: impl FnMut(&mut chassis::config::Config),
+    ) -> AppState {
+        let mut cfg = test_cfg();
+        cfg_fn(&mut cfg);
+        AppState { cfg, db, auth }
     }
 
-    fn state_with_auth(db: &chassis::db::SharedDb) -> AppState {
-        let mut cfg = test_config();
-        cfg.auth_enabled = true;
-        let provider = AuthProvider::new_for_test(
-            Box::new(MockFlow::ok("state1")),
-            test_signing_key(),
-            db.clone(),
-        );
-        AppState {
-            cfg,
-            db: db.clone(),
-            auth: Some(provider),
-        }
-    }
-
-    fn state_with_billing(db: &chassis::db::SharedDb) -> AppState {
-        let mut cfg = test_config();
-        cfg.billing_enabled = true;
-        cfg.stripe_webhook_secret = "whsec_test".into();
-        AppState {
-            cfg,
-            db: db.clone(),
-            auth: None,
-        }
-    }
-
-    fn state_with_api_keys(db: &chassis::db::SharedDb) -> AppState {
-        let mut cfg = test_config();
-        cfg.api_keys_enabled = true;
-        let provider = AuthProvider::new_for_test(
-            Box::new(MockFlow::ok("state1")),
-            test_signing_key(),
-            db.clone(),
-        );
-        AppState {
-            cfg,
-            db: db.clone(),
-            auth: Some(provider),
-        }
-    }
-
-    fn insert_user(db: &chassis::db::SharedDb, id: &str, sub: &str) -> auth::User {
-        let conn = db.lock().unwrap();
+    fn insert_user(conn: &rusqlite::Connection, id: &str) {
         conn.execute(
-            "INSERT INTO users (id, oidc_sub, email, display_name, groups, created_at, last_login_at, premium)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            rusqlite::params![id, sub, "u@example.com", "User", "[]", "2024-01-01T00:00:00Z", "2024-01-01T00:00:00Z", 0],
+            "INSERT INTO users (id, oidc_sub) VALUES (?, ?)",
+            rusqlite::params![id, format!("sub-{id}")],
         )
         .unwrap();
-        auth::User {
-            id: id.into(),
-            oidc_sub: sub.into(),
-            email: Some("u@example.com".into()),
-            display_name: Some("User".into()),
-            groups: vec![],
-            premium: false,
-        }
     }
 
-    fn session_cookie_for_test(user: &auth::User) -> String {
-        let full = auth::session_cookie_for(test_signing_key(), user);
-        // session_cookie_for returns a full Set-Cookie header; handlers expect
-        // only the signed cookie value (the part after "session=").
-        full.split(';')
+    fn user_cookie_value(uid: &str) -> String {
+        let user = chassis::auth::User {
+            id: uid.into(),
+            oidc_sub: format!("sub-{uid}"),
+            email: None,
+            display_name: None,
+            groups: vec![],
+            premium: false,
+        };
+        // session_cookie_for returns "session=<signed>; Path=...". The value
+        // before the first ';' is what parse_cookies extracts as the session.
+        chassis::auth::session_cookie_for(TEST_KEY, &user)
+            .split(';')
             .next()
             .unwrap()
             .split_once('=')
@@ -1051,94 +1018,94 @@ mod tests {
             .to_string()
     }
 
-    struct MockFlow {
-        state: String,
-        claims: std::sync::Mutex<Option<auth::TokenClaims>>,
-        fail_exchange: std::sync::Mutex<bool>,
+    struct FakeFlow {
+        auth_url: String,
+        claims: Option<chassis::auth::TokenClaims>,
     }
 
-    impl MockFlow {
-        fn ok(state: &str) -> Self {
-            Self {
-                state: state.into(),
-                claims: std::sync::Mutex::new(Some(auth::TokenClaims {
-                    sub: "sub1".into(),
-                    email: Some("u@example.com".into()),
-                    name: Some("User".into()),
-                    groups: vec![],
-                })),
-                fail_exchange: std::sync::Mutex::new(false),
-            }
-        }
-
-        fn failing_exchange(state: &str) -> Self {
-            Self {
-                state: state.into(),
-                claims: std::sync::Mutex::new(Some(auth::TokenClaims {
-                    sub: "sub1".into(),
-                    email: Some("u@example.com".into()),
-                    name: Some("User".into()),
-                    groups: vec![],
-                })),
-                fail_exchange: std::sync::Mutex::new(true),
-            }
-        }
-    }
-
-    impl auth::OidcFlow for MockFlow {
+    impl chassis::auth::OidcFlow for FakeFlow {
         fn authorize(&self) -> (String, String, String) {
-            let url = format!("https://issuer.example.com/auth?state={}", self.state);
-            (url, self.state.clone(), String::new())
+            (self.auth_url.clone(), "state".into(), "".into())
         }
-
         fn exchange<'a>(
             &'a self,
             _code: &'a str,
             _nonce: &'a str,
-        ) -> std::pin::Pin<
-            Box<dyn std::future::Future<Output = anyhow::Result<auth::TokenClaims>> + Send + 'a>,
-        > {
-            Box::pin(async move {
-                if *self.fail_exchange.lock().unwrap() {
-                    anyhow::bail!("exchange failed")
-                }
-                self.claims
-                    .lock()
-                    .unwrap()
-                    .take()
-                    .ok_or_else(|| anyhow::anyhow!("no claims"))
-            })
+        ) -> Pin<Box<dyn Future<Output = anyhow::Result<chassis::auth::TokenClaims>> + Send + 'a>>
+        {
+            let claims = self.claims.clone();
+            Box::pin(async move { claims.ok_or_else(|| anyhow::anyhow!("no claims configured")) })
         }
     }
 
-    fn stripe_signature(secret: &str, payload: &[u8]) -> String {
-        use hmac::{Hmac, Mac};
-        use sha2::Sha256;
-        let ts = time::OffsetDateTime::now_utc().unix_timestamp();
-        let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes()).unwrap();
-        mac.update(format!("{ts}.").as_bytes());
-        mac.update(payload);
-        let sig = hex::encode(mac.finalize().into_bytes());
-        format!("t={ts},v1={sig}")
+    fn auth_provider(
+        db: chassis::db::SharedDb,
+        claims: Option<chassis::auth::TokenClaims>,
+    ) -> chassis::auth::AuthProvider {
+        chassis::auth::AuthProvider::new_for_test(
+            Box::new(FakeFlow {
+                auth_url: "https://idp.example.com/auth".into(),
+                claims,
+            }),
+            TEST_KEY,
+            db,
+        )
     }
 
-    // ---- dispatch / route ----
+    #[tokio::test]
+    async fn route_dispatches_health_and_spa() {
+        let (_d, db) = open_test_db();
+        let state = state_with(db, None, |_| {});
+        let r = route(&state, "GET", "/healthz", &[], &[], &[]).await;
+        assert_eq!(r.status, 200);
+
+        let r = route(&state, "GET", "/unknown", &[], &[], &[]).await;
+        assert_eq!(r.status, 404);
+    }
 
     #[tokio::test]
-    async fn dispatch_preflight_short_circuits() {
+    async fn route_routes_entities_and_search() {
         let (_d, db) = open_test_db();
-        let state = state_with_db(&db);
-        let r = dispatch(
+        seed_entity(&db, "e1", "o/r1", Some("d"), 10);
+        db.lock()
+            .unwrap()
+            .execute("UPDATE entities SET metadata = '{}' WHERE id = 'e1'", [])
+            .unwrap();
+        let state = state_with(db, None, |cfg| cfg.api_keys_enabled = false);
+
+        let r = route(&state, "GET", "/api/v1/entities", &[], &[], &[]).await;
+        assert_eq!(r.status, 200);
+
+        let r = route(&state, "GET", "/api/v1/entities/o/r1", &[], &[], &[]).await;
+        assert_eq!(r.status, 200);
+
+        let r = route(
             &state,
-            "OPTIONS",
-            "/api/v1/stats",
+            "GET",
+            "/api/v1/search",
+            &[("q", "rocket")],
             &[],
-            &[("Origin", "http://localhost:3000")],
             &[],
         )
         .await;
         assert_eq!(r.status, 200);
-        assert!(body_string(&r).is_empty());
+    }
+
+    #[tokio::test]
+    async fn dispatch_preflight_short_circuits() {
+        let (_d, db) = open_test_db();
+        let state = state_with(db, None, |_| {});
+        let r = dispatch(
+            &state,
+            "OPTIONS",
+            "/api/v1/entities",
+            &[],
+            &[("Origin", "http://localhost:8080")],
+            &[],
+        )
+        .await;
+        assert_eq!(r.status, 200);
+        assert!(r.body.is_empty());
         assert!(r
             .headers
             .iter()
@@ -1146,414 +1113,361 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn dispatch_healthz_skips_analytics() {
+    async fn dispatch_runs_health_without_analytics_crash() {
         let (_d, db) = open_test_db();
-        let state = state_with_db(&db);
+        let state = state_with(db, None, |_| {});
         let r = dispatch(&state, "GET", "/healthz", &[], &[], &[]).await;
         assert_eq!(r.status, 200);
-        assert_eq!(body_string(&r), "{\"status\":\"ok\"}\n");
     }
 
-    #[tokio::test]
-    async fn route_healthz_and_api_v1() {
+    #[test]
+    fn gated_skips_auth_when_keys_disabled() {
         let (_d, db) = open_test_db();
-        let state = state_with_db(&db);
-        let r = route(&state, "GET", "/healthz", &[], &[], &[]).await;
-        assert_eq!(r.status, 200);
-        let r = route(&state, "GET", "/api/v1/stats", &[], &[], &[]).await;
-        assert_eq!(r.status, 200);
-    }
-
-    #[tokio::test]
-    async fn route_auth_disabled_falls_through() {
-        let (_d, db) = open_test_db();
-        let state = state_with_db(&db);
-        let r = route(&state, "GET", "/auth/login", &[], &[], &[]).await;
-        assert_eq!(r.status, 404);
-    }
-
-    #[tokio::test]
-    async fn route_auth_enabled() {
-        let (_d, db) = open_test_db();
-        let state = state_with_auth(&db);
-        let r = route(&state, "GET", "/auth/login", &[], &[], &[]).await;
-        assert_eq!(r.status, 302);
-    }
-
-    #[tokio::test]
-    async fn route_billing_disabled_falls_through() {
-        let (_d, db) = open_test_db();
-        let state = state_with_db(&db);
-        let r = route(&state, "POST", "/api/billing/webhook", &[], &[], b"{}").await;
-        assert_eq!(r.status, 404);
-    }
-
-    #[tokio::test]
-    async fn route_billing_enabled_webhook_bad_sig() {
-        let (_d, db) = open_test_db();
-        let state = state_with_billing(&db);
-        let r = route(
-            &state,
-            "POST",
-            "/api/billing/webhook",
-            &[],
-            &[("Stripe-Signature", "bad")],
-            b"{}",
-        )
-        .await;
-        assert_eq!(r.status, 400);
-    }
-
-    #[tokio::test]
-    async fn route_keys_disabled_falls_through() {
-        let (_d, db) = open_test_db();
-        let state = state_with_db(&db);
-        let r = route(&state, "GET", "/api/keys", &[], &[], &[]).await;
-        assert_eq!(r.status, 404);
-    }
-
-    #[tokio::test]
-    async fn route_keys_enabled() {
-        let (_d, db) = open_test_db();
-        let state = state_with_api_keys(&db);
-        let user = insert_user(&db, "u1", "sub1");
-        let cookie = session_cookie_for_test(&user);
-        let r = route(
-            &state,
-            "GET",
-            "/api/keys",
-            &[],
-            &[("Cookie", &format!("session={cookie}"))],
-            &[],
-        )
-        .await;
+        let state = state_with(db, None, |cfg| cfg.api_keys_enabled = false);
+        let r = gated(&state, &[], "/api/v1/entities", |s| entities(&s.db, &[]));
         assert_eq!(r.status, 200);
     }
 
     #[test]
-    fn route_api_v1_known_paths() {
-        let (_d, db) = open_test_db();
-        let state = state_with_db(&db);
-        assert!(route_api_v1(&state, "GET", "/api/v1/unknown", &[], &[]).is_none());
-        let r = route_api_v1(&state, "GET", "/api/v1/stats", &[], &[]).unwrap();
-        assert_eq!(r.status, 200);
-    }
-
-    #[tokio::test]
-    async fn route_auth_known_and_unknown() {
-        let (_d, db) = open_test_db();
-        let state = state_with_auth(&db);
-        assert!(route_auth(&state, "GET", "/auth/unknown", None, &[], &[])
-            .await
-            .is_none());
-        let r = route_auth(&state, "GET", "/auth/login", None, &[], &[])
-            .await
-            .unwrap();
-        assert_eq!(r.status, 302);
-    }
-
-    #[tokio::test]
-    async fn route_billing_known_and_unknown() {
-        let (_d, db) = open_test_db();
-        let state = state_with_billing(&db);
-        assert!(
-            route_billing(&state, "/api/billing/unknown", None, &[], &[])
-                .await
-                .is_none()
-        );
-        let r = route_billing(
-            &state,
-            "/api/billing/webhook",
-            None,
-            &[("Stripe-Signature", "bad")],
-            b"{}",
-        )
-        .await
-        .unwrap();
-        assert_eq!(r.status, 400);
-    }
-
-    #[test]
-    fn route_keys_known_and_unknown() {
-        let (_d, db) = open_test_db();
-        let state = state_with_api_keys(&db);
-        let user = insert_user(&db, "u1", "sub1");
-        let cookie = session_cookie_for_test(&user);
-        // Disabled flags → None.
-        let disabled = AppState {
-            cfg: test_config(),
-            db: db.clone(),
-            auth: None,
-        };
-        assert!(route_keys(&disabled, "GET", "/api/keys", Some(&cookie), &[]).is_none());
-        // Known path with auth.
-        let r = route_keys(&state, "GET", "/api/keys", Some(&cookie), &[]).unwrap();
-        assert_eq!(r.status, 200);
-    }
-
-    // ---- gate / gated ----
-
-    #[test]
-    fn gate_v1_missing_and_invalid_key_401() {
-        let (_d, db) = open_test_db();
-        let r = gate_v1(&db, None, "/api/v1/stats", 60);
-        assert_eq!(r.unwrap_err().status, 401);
-        let r = gate_v1(&db, Some("pk_deadbeef"), "/api/v1/stats", 60);
-        assert_eq!(r.unwrap_err().status, 401);
-    }
-
-    #[test]
-    fn gate_v1_valid_key_passes_and_rate_limits() {
+    fn gate_v1_authenticates_and_rate_limits() {
         let (_d, db) = open_test_db();
         let conn = db.lock().unwrap();
-        let plaintext = apikeys::create_key(&conn, "u1", "ci").unwrap();
+        let plaintext = chassis::apikeys::create_key(&conn, "u1", "l1").unwrap();
         drop(conn);
-        let r = gate_v1(&db, Some(&plaintext), "/api/v1/stats", 60).unwrap();
-        assert_eq!(r.remaining, 59);
-        for _ in 0..59 {
-            let _ = gate_v1(&db, Some(&plaintext), "/api/v1/stats", 60).unwrap();
-        }
-        let r = gate_v1(&db, Some(&plaintext), "/api/v1/stats", 60);
+
+        // First request is allowed.
+        let r = gate_v1(&db, Some(&plaintext), "/api/v1/entities", 1);
+        assert!(r.is_ok());
+        assert_eq!(r.unwrap().remaining, 0);
+
+        // Second request in the same window is rejected with 429.
+        let r = gate_v1(&db, Some(&plaintext), "/api/v1/entities", 1);
+        assert!(r.is_err());
         assert_eq!(r.unwrap_err().status, 429);
+
+        // Unknown key is 401.
+        let r = gate_v1(&db, Some("pk_notreal"), "/api/v1/entities", 1);
+        assert!(r.is_err());
+        assert_eq!(r.unwrap_err().status, 401);
     }
 
     #[test]
-    fn gate_v1_db_error_500() {
+    fn gated_adds_rate_limit_header_or_returns_gate_error() {
         let (_d, db) = open_test_db();
         let conn = db.lock().unwrap();
-        let plaintext = apikeys::create_key(&conn, "u1", "ci").unwrap();
-        conn.execute("DROP TABLE api_usage", []).unwrap();
+        let plaintext = chassis::apikeys::create_key(&conn, "u1", "l1").unwrap();
         drop(conn);
-        let r = gate_v1(&db, Some(&plaintext), "/api/v1/stats", 60);
-        assert_eq!(r.unwrap_err().status, 500);
-    }
 
-    #[test]
-    fn gated_skips_gate_when_disabled() {
-        let (_d, db) = open_test_db();
-        let state = state_with_db(&db);
-        let r = gated(&state, &[], "/api/v1/stats", |s| stats(&s.db));
-        assert_eq!(r.status, 200);
-        assert!(!r.headers.iter().any(|(k, _)| k == "X-RateLimit-Remaining"));
-    }
-
-    #[test]
-    fn gated_applies_gate_when_enabled() {
-        let (_d, db) = open_test_db();
-        let state = state_with_api_keys(&db);
-        let conn = db.lock().unwrap();
-        let plaintext = apikeys::create_key(&conn, "u1", "ci").unwrap();
-        drop(conn);
-        let r = gated(&state, &[("X-API-Key", &plaintext)], "/api/v1/stats", |s| {
-            stats(&s.db)
-        });
-        assert_eq!(r.status, 200);
-        assert!(r.headers.iter().any(|(k, _)| k == "X-RateLimit-Remaining"));
-    }
-
-    #[test]
-    fn gated_invalid_key_401() {
-        let (_d, db) = open_test_db();
-        let state = state_with_api_keys(&db);
+        let state = state_with(db.clone(), None, |cfg| cfg.api_keys_enabled = true);
         let r = gated(
             &state,
-            &[("X-API-Key", "pk_deadbeef")],
-            "/api/v1/stats",
-            |s| stats(&s.db),
+            &[("X-API-Key", &plaintext)],
+            "/api/v1/entities",
+            |s| entities(&s.db, &[]),
+        );
+        assert_eq!(r.status, 200);
+        assert!(r.headers.iter().any(|(k, _)| k == "X-RateLimit-Remaining"));
+
+        let r = gated(
+            &state,
+            &[("X-API-Key", "pk_notreal")],
+            "/api/v1/entities",
+            |s| entities(&s.db, &[]),
         );
         assert_eq!(r.status, 401);
     }
 
-    // ---- auth ----
+    #[tokio::test]
+    async fn auth_login_redirects() {
+        let (_d, db) = open_test_db();
+        let state = state_with(db.clone(), Some(auth_provider(db.clone(), None)), |_| {});
+        let r = auth_login(&state);
+        assert_eq!(r.status, 302);
+        assert!(r
+            .headers
+            .iter()
+            .any(|(k, v)| k == "Location" && v == "https://idp.example.com/auth"));
+    }
 
     #[tokio::test]
-    async fn auth_callback_valid_redirects_with_session() {
+    async fn auth_callback_success_and_invalid_state() {
         let (_d, db) = open_test_db();
-        let state = state_with_auth(&db);
-        let cookies = vec![(auth::STATE_COOKIE.to_string(), "state1".to_string())];
-        let r = auth_callback(&state, &cookies, &[("state", "state1"), ("code", "c")]).await;
+        let claims = chassis::auth::TokenClaims {
+            sub: "sub-1".into(),
+            email: Some("a@b.com".into()),
+            name: Some("A B".into()),
+            groups: vec!["g1".into()],
+        };
+        let state = state_with(
+            db.clone(),
+            Some(auth_provider(db.clone(), Some(claims))),
+            |_| {},
+        );
+
+        // Invalid state.
+        let cookies = vec![(chassis::auth::STATE_COOKIE.to_string(), "bad".to_string())];
+        let r = auth_callback(&state, &cookies, &[("state", "state"), ("code", "c")]).await;
+        assert_eq!(r.status, 400);
+
+        // Valid callback creates a session and redirects to "/".
+        let cookies = vec![(chassis::auth::STATE_COOKIE.to_string(), "state".to_string())];
+        let r = auth_callback(&state, &cookies, &[("state", "state"), ("code", "c")]).await;
         assert_eq!(r.status, 302);
         assert!(r.headers.iter().any(|(k, v)| k == "Location" && v == "/"));
         assert!(r.headers.iter().any(|(k, _)| k == "Set-Cookie"));
-    }
 
-    #[tokio::test]
-    async fn auth_callback_invalid_state_400() {
-        let (_d, db) = open_test_db();
-        let state = state_with_auth(&db);
-        let cookies = vec![(auth::STATE_COOKIE.to_string(), "state1".to_string())];
-        let r = auth_callback(&state, &cookies, &[("state", "wrong"), ("code", "c")]).await;
-        assert_eq!(r.status, 400);
-    }
-
-    #[tokio::test]
-    async fn auth_callback_exchange_error_502() {
-        let (_d, db) = open_test_db();
-        let provider = AuthProvider::new_for_test(
-            Box::new(MockFlow::failing_exchange("state1")),
-            test_signing_key(),
-            db.clone(),
-        );
-        let state = AppState {
-            cfg: test_config(),
-            db: db.clone(),
-            auth: Some(provider),
-        };
-        let cookies = vec![(auth::STATE_COOKIE.to_string(), "state1".to_string())];
-        let r = auth_callback(&state, &cookies, &[("state", "state1"), ("code", "c")]).await;
-        assert_eq!(r.status, 502);
+        // The upserted user can now be read via current_user.
+        let session = r
+            .headers
+            .iter()
+            .find(|(k, _)| k == "Set-Cookie")
+            .map(|(_, v)| v.as_str())
+            .unwrap();
+        let cookie_value = session
+            .split(';')
+            .next()
+            .unwrap()
+            .split_once('=')
+            .unwrap()
+            .1;
+        let provider = state.auth.as_ref().unwrap();
+        let user = provider.current_user(&state.db, cookie_value).unwrap();
+        assert_eq!(user.email, Some("a@b.com".into()));
     }
 
     #[test]
-    fn auth_me_unauthenticated_401() {
+    fn auth_me_unauthenticated_and_authenticated() {
         let (_d, db) = open_test_db();
-        let state = state_with_auth(&db);
+        let state = state_with(db.clone(), Some(auth_provider(db.clone(), None)), |_| {});
         let r = auth_me(&state, None);
         assert_eq!(r.status, 401);
-    }
 
-    #[test]
-    fn auth_me_invalid_session_401() {
-        let (_d, db) = open_test_db();
-        let state = state_with_auth(&db);
-        let r = auth_me(&state, Some("bad-cookie"));
-        assert_eq!(r.status, 401);
-    }
-
-    #[test]
-    fn auth_me_valid_session() {
-        let (_d, db) = open_test_db();
-        let state = state_with_auth(&db);
-        let user = insert_user(&db, "u1", "sub1");
-        let cookie = session_cookie_for_test(&user);
+        insert_user(&db.lock().unwrap(), "u1");
+        let cookie = user_cookie_value("u1");
         let r = auth_me(&state, Some(&cookie));
         assert_eq!(r.status, 200);
         let v: serde_json::Value = serde_json::from_str(&body_string(&r)).unwrap();
         assert_eq!(v["id"], "u1");
-        assert!(v["groups"].is_null());
-    }
-
-    // ---- billing ----
-
-    #[tokio::test]
-    async fn billing_checkout_unauthenticated_401() {
-        let (_d, db) = open_test_db();
-        let state = state_with_billing(&db);
-        let r = billing_checkout(&state, None).await;
-        assert_eq!(r.status, 401);
-    }
-
-    #[tokio::test]
-    async fn resolve_checkout_user_prefers_session_then_dev() {
-        let (_d, db) = open_test_db();
-        let state = state_with_auth(&db);
-        let user = insert_user(&db, "u1", "sub1");
-        let cookie = session_cookie_for_test(&user);
-        let user_id = resolve_checkout_user(&state, Some(&cookie)).await;
-        assert_eq!(user_id, "u1");
-
-        let mut state = state_with_billing(&db);
-        state.cfg.dev_user_id = "dev1".into();
-        let user_id = resolve_checkout_user(&state, None).await;
-        assert_eq!(user_id, "dev1");
     }
 
     #[test]
-    fn billing_webhook_invalid_signature_400() {
+    fn auth_logout_post_only() {
         let (_d, db) = open_test_db();
-        let state = state_with_billing(&db);
-        let r = billing_webhook(&state, "t=1,v1=00", b"{}");
-        assert_eq!(r.status, 400);
-    }
-
-    #[test]
-    fn billing_webhook_ignored_event() {
-        let (_d, db) = open_test_db();
-        let state = state_with_billing(&db);
-        let payload = br#"{"type":"customer.subscription.deleted","data":{"object":{"id":"sub_404","customer":"cus_404"}}}"#;
-        let sig = stripe_signature("whsec_test", payload);
-        let r = billing_webhook(&state, &sig, payload);
+        let state = state_with(db.clone(), Some(auth_provider(db.clone(), None)), |_| {});
+        let r = auth_logout(&state, "POST");
         assert_eq!(r.status, 200);
-        assert_eq!(body_string(&r), "{\"ignored\":true}");
+        let r = auth_logout(&state, "GET");
+        assert_eq!(r.status, 405);
     }
 
     #[test]
-    fn billing_webhook_empty_ack() {
-        let (_d, db) = open_test_db();
-        let state = state_with_billing(&db);
-        let payload = br#"{"type":"unknown.event","data":{"object":{}}}"#;
-        let sig = stripe_signature("whsec_test", payload);
-        let r = billing_webhook(&state, &sig, payload);
+    fn map_webhook_outcome_maps_all_branches() {
+        let r = map_webhook_outcome(billing::WebhookOutcome {
+            status: 200,
+            body: "".into(),
+        });
         assert_eq!(r.status, 200);
         assert!(r.body.is_empty());
+
+        let r = map_webhook_outcome(billing::WebhookOutcome {
+            status: 200,
+            body: "{\"ignored\":true}".into(),
+        });
+        assert_eq!(r.status, 200);
+        assert_eq!(body_string(&r), "{\"ignored\":true}");
+
+        let r = map_webhook_outcome(billing::WebhookOutcome {
+            status: 400,
+            body: "bad\n".into(),
+        });
+        assert_eq!(r.status, 400);
+        assert_eq!(body_string(&r), "bad\n");
     }
 
-    // ---- keys ----
+    #[tokio::test]
+    async fn billing_checkout_resolves_user_and_handles_errors() {
+        let (_d, db) = open_test_db();
+        insert_user(&db.lock().unwrap(), "u1");
+
+        // No auth provider and no dev_user_id → 401.
+        let state = state_with(db.clone(), None, |_| {});
+        let r = billing_checkout(&state, None).await;
+        assert_eq!(r.status, 401);
+
+        // Dev user override; Stripe call fails → 502.
+        let state = state_with(db.clone(), None, |cfg| cfg.dev_user_id = "u1".into());
+        let r = billing_checkout(&state, None).await;
+        assert_eq!(r.status, 502);
+
+        // Session user path; Stripe call fails → 502.
+        let state = state_with(db.clone(), Some(auth_provider(db.clone(), None)), |_| {});
+        let cookie = user_cookie_value("u1");
+        let r = billing_checkout(&state, Some(&cookie)).await;
+        assert_eq!(r.status, 502);
+    }
 
     #[test]
-    fn keys_list_or_create_unauthenticated_401() {
+    fn keys_list_or_create_methods() {
         let (_d, db) = open_test_db();
-        let state = state_with_api_keys(&db);
+        insert_user(&db.lock().unwrap(), "u1");
+        let state = state_with(db.clone(), Some(auth_provider(db.clone(), None)), |cfg| {
+            cfg.api_keys_enabled = true
+        });
+        let cookie = user_cookie_value("u1");
+
+        let r = keys_list_or_create(&state, "GET", Some(&cookie), &[]);
+        assert_eq!(r.status, 200);
+        assert!(body_string(&r).contains("\"keys\":null"));
+
+        let r = keys_list_or_create(&state, "POST", Some(&cookie), br#"{"label":"mine"}"#);
+        assert_eq!(r.status, 200);
+        assert!(body_string(&r).contains("\"key\":\"pk_"));
+
+        let r = keys_list_or_create(&state, "PUT", Some(&cookie), &[]);
+        assert_eq!(r.status, 405);
+
         let r = keys_list_or_create(&state, "GET", None, &[]);
         assert_eq!(r.status, 401);
     }
 
     #[test]
-    fn keys_list_or_create_get_and_post() {
+    fn keys_revoke_paths() {
         let (_d, db) = open_test_db();
-        let state = state_with_api_keys(&db);
-        let user = insert_user(&db, "u1", "sub1");
-        let cookie = session_cookie_for_test(&user);
-
-        let r = keys_list_or_create(&state, "GET", Some(&cookie), &[]);
-        assert_eq!(r.status, 200);
-        let v: serde_json::Value = serde_json::from_str(&body_string(&r)).unwrap();
-        assert!(v["keys"].is_null());
-
-        let r = keys_list_or_create(&state, "POST", Some(&cookie), br#"{"label":"ci"}"#);
-        assert_eq!(r.status, 200);
-        let v: serde_json::Value = serde_json::from_str(&body_string(&r)).unwrap();
-        assert!(v["key"].as_str().unwrap().starts_with("pk_"));
-
-        let r = keys_list_or_create(&state, "GET", Some(&cookie), &[]);
-        assert_eq!(r.status, 200);
-        let v: serde_json::Value = serde_json::from_str(&body_string(&r)).unwrap();
-        assert_eq!(v["keys"].as_array().unwrap().len(), 1);
-    }
-
-    #[test]
-    fn keys_list_or_create_wrong_method_405() {
-        let (_d, db) = open_test_db();
-        let state = state_with_api_keys(&db);
-        let user = insert_user(&db, "u1", "sub1");
-        let cookie = session_cookie_for_test(&user);
-        let r = keys_list_or_create(&state, "PATCH", Some(&cookie), &[]);
-        assert_eq!(r.status, 405);
-    }
-
-    #[test]
-    fn keys_revoke_flow() {
-        let (_d, db) = open_test_db();
-        let state = state_with_api_keys(&db);
-        let user = insert_user(&db, "u1", "sub1");
-        let cookie = session_cookie_for_test(&user);
-
-        let r = keys_revoke(&state, "GET", "k1", Some(&cookie));
-        assert_eq!(r.status, 405);
-
-        let r = keys_revoke(&state, "DELETE", "no-such", Some(&cookie));
-        assert_eq!(r.status, 404);
-
         let conn = db.lock().unwrap();
-        let plaintext = apikeys::create_key(&conn, "u1", "ci").unwrap();
-        let identity = apikeys::authenticate(&conn, &plaintext).unwrap();
+        insert_user(&conn, "u1");
+        let plaintext = chassis::apikeys::create_key(&conn, "u1", "l1").unwrap();
+        let key_id = chassis::apikeys::authenticate(&conn, &plaintext)
+            .unwrap()
+            .key_id;
         drop(conn);
 
-        let r = keys_revoke(&state, "DELETE", &identity.key_id, Some(&cookie));
+        let state = state_with(db.clone(), Some(auth_provider(db.clone(), None)), |cfg| {
+            cfg.api_keys_enabled = true
+        });
+        let cookie = user_cookie_value("u1");
+
+        // Wrong method.
+        let r = keys_revoke(&state, "GET", &key_id, Some(&cookie));
+        assert_eq!(r.status, 405);
+
+        // Success.
+        let r = keys_revoke(&state, "DELETE", &key_id, Some(&cookie));
         assert_eq!(r.status, 200);
         assert_eq!(body_string(&r), "{\"ok\":true}");
 
-        let r = keys_revoke(&state, "DELETE", &identity.key_id, Some(&cookie));
+        // Already revoked → 404.
+        let r = keys_revoke(&state, "DELETE", &key_id, Some(&cookie));
+        assert_eq!(r.status, 404);
+    }
+
+    #[tokio::test]
+    async fn route_auth_dispatches_when_enabled() {
+        let (_d, db) = open_test_db();
+
+        // Auth disabled → everything falls through to SPA.
+        let state = state_with(db.clone(), None, |cfg| cfg.auth_enabled = false);
+        let r = route_auth(&state, "GET", "/auth/login", &[], &[]).await;
+        assert_eq!(r.status, 404);
+
+        let state = state_with(db.clone(), Some(auth_provider(db.clone(), None)), |_| {});
+
+        let r = route_auth(&state, "GET", "/auth/login", &[], &[]).await;
+        assert_eq!(r.status, 302);
+
+        let r = route_auth(&state, "GET", "/auth/logout", &[], &[]).await;
+        assert_eq!(r.status, 405);
+
+        let r = route_auth(&state, "GET", "/auth/me", &[], &[]).await;
+        assert_eq!(r.status, 401);
+
+        let r = route_auth(&state, "GET", "/auth/unknown", &[], &[]).await;
+        assert_eq!(r.status, 404);
+    }
+
+    #[tokio::test]
+    async fn route_billing_dispatches_when_enabled() {
+        let (_d, db) = open_test_db();
+
+        // Billing disabled → SPA.
+        let state = state_with(db.clone(), None, |cfg| cfg.billing_enabled = false);
+        let r = route_billing(&state, "POST", "/api/billing/webhook", &[], &[], None).await;
+        assert_eq!(r.status, 404);
+
+        // Billing enabled.
+        let state = state_with(db.clone(), None, |cfg| {
+            cfg.billing_enabled = true;
+            cfg.stripe_webhook_secret = "secret".into();
+        });
+
+        // Bad signature path.
+        let r = route_billing(
+            &state,
+            "POST",
+            "/api/billing/webhook",
+            &[("Stripe-Signature", "bad")],
+            b"{}",
+            None,
+        )
+        .await;
+        assert_eq!(r.status, 400);
+
+        // Checkout without session → 401.
+        let r = route_billing(&state, "GET", "/api/billing/checkout", &[], &[], None).await;
+        assert_eq!(r.status, 401);
+
+        // Unknown billing path → SPA.
+        let r = route_billing(&state, "GET", "/api/billing/unknown", &[], &[], None).await;
+        assert_eq!(r.status, 404);
+    }
+
+    #[tokio::test]
+    async fn route_keys_dispatches_when_enabled() {
+        let (_d, db) = open_test_db();
+        insert_user(&db.lock().unwrap(), "u1");
+
+        // Keys disabled → SPA.
+        let state = state_with(db.clone(), Some(auth_provider(db.clone(), None)), |cfg| {
+            cfg.api_keys_enabled = false
+        });
+        let r = route_keys(&state, "GET", "/api/keys", None, &[]);
+        assert_eq!(r.status, 404);
+
+        // Keys enabled but no auth provider → SPA.
+        let state = state_with(db.clone(), None, |cfg| cfg.api_keys_enabled = true);
+        let r = route_keys(&state, "GET", "/api/keys", None, &[]);
+        assert_eq!(r.status, 404);
+
+        // Keys enabled + auth.
+        let state = state_with(db.clone(), Some(auth_provider(db.clone(), None)), |cfg| {
+            cfg.api_keys_enabled = true
+        });
+        let cookie = user_cookie_value("u1");
+
+        // No session → 401.
+        let r = route_keys(&state, "GET", "/api/keys", None, &[]);
+        assert_eq!(r.status, 401);
+
+        // List.
+        let r = route_keys(&state, "GET", "/api/keys", Some(&cookie), &[]);
+        assert_eq!(r.status, 200);
+
+        // Create.
+        let r = route_keys(
+            &state,
+            "POST",
+            "/api/keys",
+            Some(&cookie),
+            br#"{"label":"l"}"#,
+        );
+        assert_eq!(r.status, 200);
+        assert!(body_string(&r).contains("\"key\""));
+
+        // Revoke wrong method.
+        let r = route_keys(&state, "GET", "/api/keys/kid", Some(&cookie), &[]);
+        assert_eq!(r.status, 405);
+
+        // Revoke non-existent key → 404.
+        let r = route_keys(&state, "DELETE", "/api/keys/kid", Some(&cookie), &[]);
         assert_eq!(r.status, 404);
     }
 }

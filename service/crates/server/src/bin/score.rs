@@ -42,12 +42,9 @@ fn entity_ids(conn: &rusqlite::Connection, args: &[String]) -> Result<Vec<String
     }
 }
 
-/// Recompute scores for the entity IDs resolved from `args`.
-fn run(conn: &rusqlite::Connection, args: &[String]) -> Result<()> {
-    let ids = entity_ids(conn, args)?;
-    tracing::info!("Scoring {} entities...", ids.len());
-
-    for id in &ids {
+/// Go parity: score each entity, log and continue on per-entity errors.
+fn run_scoring(conn: &rusqlite::Connection, ids: &[String]) {
+    for id in ids {
         // Go passes a nil fetcher: doc signals stay the zero value.
         let result = match scoring::score_entity(conn, id, None) {
             Ok(r) => r,
@@ -67,7 +64,8 @@ fn run(conn: &rusqlite::Connection, args: &[String]) -> Result<()> {
                 [id],
                 |row| row.get(0),
             )
-            .optional()?
+            .optional()
+            .unwrap_or_default()
             .unwrap_or_default();
         tracing::info!(
             "  ✓ {full_name} | Score: {}/100 | Verdict: {} | Trajectory: {}",
@@ -76,9 +74,20 @@ fn run(conn: &rusqlite::Connection, args: &[String]) -> Result<()> {
             result.trajectory
         );
     }
+}
 
+fn score_entities(conn: &rusqlite::Connection, args: &[String]) -> Result<()> {
+    let ids = entity_ids(conn, args)?;
+    tracing::info!("Scoring {} entities...", ids.len());
+    run_scoring(conn, &ids);
     tracing::info!("Scoring complete");
     Ok(())
+}
+
+fn run(cfg: &chassis::config::Config, args: &[String]) -> Result<()> {
+    let conn = db::open(&cfg.database_path).context("open db")?;
+    db::migrate(&conn).context("migrate")?;
+    score_entities(&conn, args)
 }
 
 #[cfg_attr(feature = "hotpath", hotpath::main)]
@@ -88,83 +97,75 @@ fn main() -> Result<()> {
         .init();
 
     let cfg = Config::load();
-    let conn = db::open(&cfg.database_path).context("open db")?;
-    db::migrate(&conn).context("migrate")?;
-
     let args: Vec<String> = std::env::args().skip(1).collect();
-    run(&conn, &args)
+    run(&cfg, &args)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn open_temp_db() -> rusqlite::Connection {
-        let conn = rusqlite::Connection::open_in_memory().unwrap();
-        db::migrate(&conn).unwrap();
-        conn
+    fn open_test_db() -> (tempfile::TempDir, rusqlite::Connection) {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test.db");
+        let conn = chassis::db::open(path.to_str().unwrap()).unwrap();
+        chassis::db::migrate(&conn).unwrap();
+        (dir, conn)
     }
 
-    fn insert_entity(conn: &rusqlite::Connection, full_name: &str) -> String {
-        let id = chassis::db::new_id();
+    fn seed_entity(conn: &rusqlite::Connection, id: &str, full_name: &str) {
         conn.execute(
-            "INSERT INTO entities (id, platform, slug, name, full_name, score_value, last_pushed_at, open_issues)
-             VALUES (?1, 'default', ?2, ?3, ?4, 100, datetime('now'), 5)",
-            rusqlite::params![&id, full_name, full_name, full_name],
+            "INSERT INTO entities (id, platform, slug, name, full_name, score_value, open_issues, last_pushed_at)
+             VALUES (?1, 'github', 'owner', 'repo', ?2, 1000, 10, '2024-01-01T00:00:00Z')",
+            rusqlite::params![id, full_name],
         )
         .unwrap();
-        id
     }
 
     #[test]
-    fn entity_ids_all_empty() {
-        let conn = open_temp_db();
+    fn entity_ids_parses_args() {
+        let (_d, conn) = open_test_db();
+        seed_entity(&conn, "e1", "owner/repo");
+
         let ids = entity_ids(&conn, &["--all".to_string()]).unwrap();
-        assert!(ids.is_empty());
-    }
+        assert_eq!(ids, vec!["e1".to_string()]);
 
-    #[test]
-    fn entity_ids_by_full_name_found() {
-        let conn = open_temp_db();
-        insert_entity(&conn, "owner/repo");
         let ids = entity_ids(&conn, &["owner/repo".to_string()]).unwrap();
-        assert_eq!(ids.len(), 1);
+        assert_eq!(ids, vec!["e1".to_string()]);
+
+        assert!(entity_ids(&conn, &["owner/nope".to_string()]).is_err());
+        assert!(entity_ids(&conn, &[]).is_err());
     }
 
     #[test]
-    fn entity_ids_by_full_name_missing() {
-        let conn = open_temp_db();
-        let err = entity_ids(&conn, &["owner/repo".to_string()])
-            .unwrap_err()
-            .to_string();
-        assert!(err.contains("Entity not found"));
-    }
+    fn run_scoring_saves_and_skips_errors() {
+        let (_d, conn) = open_test_db();
+        seed_entity(&conn, "e1", "owner/repo");
 
-    #[test]
-    fn entity_ids_no_args() {
-        let conn = open_temp_db();
-        let err = entity_ids(&conn, &[]).unwrap_err().to_string();
-        assert!(err.contains("Usage: score --all"));
-    }
+        run_scoring(&conn, &["e1".to_string(), "missing".to_string()]);
 
-    #[test]
-    fn run_all_empty() {
-        let conn = open_temp_db();
-        run(&conn, &["--all".to_string()]).unwrap();
-    }
-
-    #[test]
-    fn run_specific_entity() {
-        let conn = open_temp_db();
-        insert_entity(&conn, "owner/repo");
-        run(&conn, &["owner/repo".to_string()]).unwrap();
-
-        // Verify a score row was written.
         let count: i64 = conn
             .query_row(
-                "SELECT count(*) FROM entity_scores WHERE entity_id = (SELECT id FROM entities WHERE full_name = ?1)",
-                ["owner/repo"],
-                |row| row.get(0),
+                "SELECT count(*) FROM entity_scores WHERE entity_id = 'e1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn score_entities_runs_all() {
+        let (_d, conn) = open_test_db();
+        seed_entity(&conn, "e1", "owner/repo");
+
+        score_entities(&conn, &["--all".to_string()]).unwrap();
+
+        let count: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM entity_scores WHERE entity_id = 'e1'",
+                [],
+                |r| r.get(0),
             )
             .unwrap();
         assert_eq!(count, 1);

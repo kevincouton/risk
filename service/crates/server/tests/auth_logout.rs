@@ -28,7 +28,7 @@ fn start_issuer() -> (httptest::Server, String) {
         ))
         .respond_with(httptest::responders::status_code(200).body(doc.to_string())),
     );
-    // openidconnect 3.5 fetches the JWKS during discovery; no test here
+    // openidconnect 4 fetches the JWKS during discovery; no test here
     // verifies tokens, so an empty key set suffices.
     server.expect(
         httptest::Expectation::matching(httptest::matchers::request::method_path("GET", "/jwks"))

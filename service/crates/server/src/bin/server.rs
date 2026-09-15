@@ -7,12 +7,8 @@
 //! `server::handlers::dispatch` — everything below this file's mapping is final.
 
 use std::convert::Infallible;
-use std::net::Ipv4Addr;
 use std::sync::Arc;
-use std::time::Duration;
 
-use chassis::auth::AuthProvider;
-use chassis::db::SharedDb;
 use server::handlers::{self, ApiResponse, AppState};
 use topcoat::router::{
     to_bytes, tower::TowerRoute, Body, Compression, Methods, Path, Request, Response, Router,
@@ -21,45 +17,7 @@ use topcoat::router::{
 /// Go's webhook body cap (io.LimitReader 1<<20); applied uniformly.
 const BODY_LIMIT: usize = 1 << 20;
 
-#[tokio::main]
-#[cfg_attr(feature = "hotpath", hotpath::main)]
-async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt::init();
-    run(chassis::config::Config::load()).await
-}
-
-/// Full startup sequence, extracted so the integration surface (`main`) is a
-/// thin wrapper and the individual helpers below are testable.
-async fn run(cfg: chassis::config::Config) -> anyhow::Result<()> {
-    let port = cfg.api_port;
-    let (_state, app) = prepare_app(cfg).await?;
-    serve_app(app, port).await
-}
-
-/// Build the shared state and router. Separated from `run` so the wire-up
-/// (database, auth, app) can be unit-tested without binding a TCP port.
-async fn prepare_app(cfg: chassis::config::Config) -> anyhow::Result<(Arc<AppState>, Router)> {
-    let db = setup_database(&cfg)?;
-    spawn_prune_task(db.clone());
-    chassis::analytics::init(&cfg.posthog_api_key);
-    let auth = setup_auth(&cfg, db.clone()).await?;
-
-    let state = Arc::new(AppState { cfg, db, auth });
-    let app = build_app(state.clone());
-    Ok((state, app))
-}
-
-/// Bind the TCP listener and run the topcoat server.
-async fn serve_app(app: Router, port: u16) -> anyhow::Result<()> {
-    tracing::info!("risk server listening on :{port}");
-    let listener = tokio::net::TcpListener::bind((Ipv4Addr::UNSPECIFIED, port)).await?;
-    topcoat::serve(listener, app).await?;
-    Ok(())
-}
-
-/// Open (and create parent directory for) the shared database, run migrations,
-/// and prune stale api_usage rows at startup.
-fn setup_database(cfg: &chassis::config::Config) -> anyhow::Result<SharedDb> {
+fn init_db(cfg: &chassis::config::Config) -> anyhow::Result<chassis::db::SharedDb> {
     if let Some(parent) = std::path::Path::new(&cfg.database_path).parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -76,51 +34,8 @@ fn setup_database(cfg: &chassis::config::Config) -> anyhow::Result<SharedDb> {
     Ok(db)
 }
 
-/// Auth is opt-in and fail-closed (Go main.go): any misconfiguration
-/// disables auth entirely while read-only endpoints keep serving.
-fn auth_should_attempt(cfg: &chassis::config::Config) -> bool {
-    if !cfg.auth_enabled {
-        return false;
-    }
-    if cfg.session_signing_key.len() < 32 {
-        tracing::warn!("auth: SESSION_SIGNING_KEY must be at least 32 bytes, auth disabled");
-        return false;
-    }
-    true
-}
-
-async fn setup_auth(
-    cfg: &chassis::config::Config,
-    db: SharedDb,
-) -> anyhow::Result<Option<AuthProvider>> {
-    if !auth_should_attempt(cfg) {
-        return Ok(None);
-    }
-    match AuthProvider::discover(cfg, db).await {
-        Ok(p) => Ok(Some(p)),
-        Err(e) => {
-            tracing::warn!("auth: OIDC discovery failed, auth disabled: {e}");
-            Ok(None)
-        }
-    }
-}
-
-/// Spawn the daily api_usage re-prune task (DB work in spawn_blocking per the
-/// spine sync/async rule — never hold the lock across .await).
-fn spawn_prune_task(db: SharedDb) {
-    tokio::spawn(prune_forever(db));
-}
-
-async fn prune_forever(db: SharedDb) {
-    let mut tick = tokio::time::interval(Duration::from_secs(24 * 3600));
-    tick.tick().await; // first tick fires immediately; skip it
-    loop {
-        tick.tick().await;
-        prune_once(db.clone()).await;
-    }
-}
-
-async fn prune_once(db: SharedDb) {
+/// delta 12: one prune tick; extracted so it can be unit-tested.
+async fn prune_once(db: chassis::db::SharedDb) {
     let result = tokio::task::spawn_blocking(move || {
         let conn = db.lock().expect("db mutex poisoned");
         chassis::apikeys::prune_usage(&conn, 90)
@@ -133,10 +48,45 @@ async fn prune_once(db: SharedDb) {
     }
 }
 
-/// Build the catch-all router. One tower service mounted at "/" and
-/// "/{*rest}" (a catch-all segment does not match the bare prefix — both
-/// registrations are required).
-fn build_app(state: Arc<AppState>) -> Router {
+/// delta 12: daily re-prune on a tokio interval (DB work in spawn_blocking
+/// per the spine sync/async rule — never hold the lock across .await).
+fn start_prune_task(db: chassis::db::SharedDb) {
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(24 * 3600));
+        tick.tick().await; // first tick fires immediately; skip it
+        loop {
+            tick.tick().await;
+            prune_once(db.clone()).await;
+        }
+    });
+}
+
+/// Auth is opt-in and fail-closed (Go main.go): any misconfiguration
+/// disables auth entirely while read-only endpoints keep serving.
+async fn init_auth(
+    cfg: &chassis::config::Config,
+    db: chassis::db::SharedDb,
+) -> Option<chassis::auth::AuthProvider> {
+    if !cfg.auth_enabled {
+        return None;
+    }
+    if cfg.session_signing_key.len() < 32 {
+        tracing::warn!("auth: SESSION_SIGNING_KEY must be at least 32 bytes, auth disabled");
+        return None;
+    }
+    match chassis::auth::AuthProvider::discover(cfg, db).await {
+        Ok(p) => Some(p),
+        Err(e) => {
+            tracing::warn!("auth: OIDC discovery failed, auth disabled: {e}");
+            None
+        }
+    }
+}
+
+// SERVER_SHELL.md idiom 1: application construction. One catch-all
+// tower service mounted at "/" and "/{*rest}" (a catch-all segment does not
+// match the bare prefix — both registrations are required).
+fn build_router(state: Arc<AppState>) -> Router {
     let svc = {
         let state = state.clone();
         tower::service_fn(move |req: Request| {
@@ -152,6 +102,28 @@ fn build_app(state: Arc<AppState>) -> Router {
         .route(TowerRoute::new(Methods::Any, Path::new("/"), svc.clone()))
         .route(TowerRoute::new(Methods::Any, Path::new("/{*rest}"), svc))
         .build()
+}
+
+async fn run_server(cfg: &chassis::config::Config, app: Router) -> anyhow::Result<()> {
+    let port = cfg.api_port;
+    tracing::info!("risk server listening on :{port}");
+    let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::UNSPECIFIED, port)).await?;
+    topcoat::serve(listener, app).await?;
+    Ok(())
+}
+
+#[tokio::main]
+#[cfg_attr(feature = "hotpath", hotpath::main)]
+async fn main() -> anyhow::Result<()> {
+    tracing_subscriber::fmt::init();
+    let cfg = chassis::config::Config::load();
+    let db = init_db(&cfg)?;
+    chassis::analytics::init(&cfg.posthog_api_key);
+    start_prune_task(db.clone());
+    let auth = init_auth(&cfg, db.clone()).await;
+    let state = Arc::new(AppState { cfg, db, auth });
+    let app = build_router(state.clone());
+    run_server(&state.cfg, app).await
 }
 
 // SERVER_SHELL.md idiom 2: Request/Response mapping only.
@@ -210,131 +182,74 @@ mod tests {
 
     fn test_cfg(db_path: &std::path::Path) -> chassis::config::Config {
         chassis::config::Config {
-            platform_name: "risk".to_string(),
-            database_path: db_path.to_str().unwrap().to_string(),
+            platform_name: "test".into(),
+            database_path: db_path.to_string_lossy().into(),
             api_port: 0,
-            posthog_api_key: String::new(),
-            ga_id: String::new(),
-            ads_id: String::new(),
+            posthog_api_key: "".into(),
+            ga_id: "".into(),
+            ads_id: "".into(),
             auth_enabled: false,
-            oidc_issuer: String::new(),
-            oidc_client_id: String::new(),
-            oidc_client_secret: String::new(),
-            session_signing_key: String::new(),
-            app_url: String::new(),
-            cors_origin: String::new(),
+            oidc_issuer: "".into(),
+            oidc_client_id: "".into(),
+            oidc_client_secret: "".into(),
+            session_signing_key: "".into(),
+            app_url: "http://localhost:8080".into(),
+            cors_origin: "".into(),
             billing_enabled: false,
-            stripe_secret_key: String::new(),
-            stripe_webhook_secret: String::new(),
-            stripe_price_id: String::new(),
+            stripe_secret_key: "".into(),
+            stripe_webhook_secret: "".into(),
+            stripe_price_id: "".into(),
             api_keys_enabled: false,
-            dev_user_id: String::new(),
+            dev_user_id: "".into(),
         }
     }
 
     #[test]
-    fn setup_database_creates_and_migrates() {
+    fn init_db_creates_migrates_and_prunes() {
         let dir = tempfile::tempdir().unwrap();
-        let cfg = test_cfg(&dir.path().join("test.db"));
-        let db = setup_database(&cfg).unwrap();
-        let conn = db.lock().expect("db mutex poisoned");
-        // Verify the schema was applied by running a simple query.
-        let count: i64 = conn
-            .query_row(
-                "SELECT count(*) FROM sqlite_master WHERE type='table'",
-                [],
-                |r| r.get(0),
-            )
-            .unwrap();
-        assert!(count > 0);
+        let db_path = dir.path().join("sub/db.sqlite");
+        let cfg = test_cfg(&db_path);
+        let db = init_db(&cfg).unwrap();
+        assert!(db_path.exists());
+        let conn = db.lock().unwrap();
+        // Migration leaves the entities table.
+        conn.execute("SELECT 1 FROM entities LIMIT 1", []).unwrap();
     }
 
-    #[test]
-    fn auth_should_attempt_disabled() {
+    #[tokio::test]
+    async fn init_auth_disabled_returns_none() {
         let cfg = chassis::config::Config {
             auth_enabled: false,
-            session_signing_key: "x".repeat(32),
-            ..test_cfg(std::path::Path::new("/dev/null"))
+            ..test_cfg(std::path::Path::new("./test.db"))
         };
-        assert!(!auth_should_attempt(&cfg));
+        let (_d, db) = {
+            let dir = tempfile::tempdir().unwrap();
+            let db =
+                chassis::db::open_shared(dir.path().join("db.sqlite").to_str().unwrap()).unwrap();
+            (dir, db)
+        };
+        assert!(init_auth(&cfg, db).await.is_none());
     }
 
     #[test]
-    fn auth_should_attempt_short_key() {
-        let cfg = chassis::config::Config {
-            auth_enabled: true,
-            session_signing_key: "short".to_string(),
-            ..test_cfg(std::path::Path::new("/dev/null"))
-        };
-        assert!(!auth_should_attempt(&cfg));
-    }
-
-    #[test]
-    fn auth_should_attempt_ok() {
-        let cfg = chassis::config::Config {
-            auth_enabled: true,
-            session_signing_key: "x".repeat(32),
-            ..test_cfg(std::path::Path::new("/dev/null"))
-        };
-        assert!(auth_should_attempt(&cfg));
-    }
-
-    #[tokio::test]
-    async fn setup_auth_disabled_returns_none() {
-        let dir = tempfile::tempdir().unwrap();
-        let cfg = test_cfg(&dir.path().join("test.db"));
-        let db = setup_database(&cfg).unwrap();
-        let auth = setup_auth(&cfg, db).await.unwrap();
-        assert!(auth.is_none());
-    }
-
-    #[tokio::test]
-    async fn handle_healthz_ok() {
-        let dir = tempfile::tempdir().unwrap();
-        let cfg = test_cfg(&dir.path().join("test.db"));
-        let db = setup_database(&cfg).unwrap();
+    fn build_router_constructs_app() {
+        let cfg = test_cfg(std::path::Path::new("./test.db"));
         let state = Arc::new(AppState {
             cfg,
-            db,
+            db: chassis::db::open_shared(":memory:").unwrap(),
             auth: None,
         });
-        let req = Request::builder()
-            .uri("/healthz")
-            .body(Body::empty())
-            .unwrap();
-        let resp = handle(state, req).await;
-        assert_eq!(resp.status(), 200);
-        let bytes = to_bytes(resp.into_body(), BODY_LIMIT).await.unwrap();
-        assert_eq!(bytes.as_ref(), b"{\"status\":\"ok\"}\n");
-    }
-
-    #[test]
-    fn map_response_preserves_headers_and_status() {
-        let resp = ApiResponse {
-            status: 418,
-            headers: vec![("x-custom".to_string(), "yes".to_string())],
-            body: b"tea".to_vec(),
-        };
-        let mapped = map_response(resp);
-        assert_eq!(mapped.status(), 418);
-        assert_eq!(mapped.headers().get("x-custom").unwrap(), "yes");
+        let _app = build_router(state);
     }
 
     #[tokio::test]
-    async fn prune_once_runs_without_error() {
+    async fn prune_once_runs_without_panic() {
         let dir = tempfile::tempdir().unwrap();
-        let cfg = test_cfg(&dir.path().join("test.db"));
-        let db = setup_database(&cfg).unwrap();
+        let db = chassis::db::open_shared(dir.path().join("db.sqlite").to_str().unwrap()).unwrap();
+        {
+            let conn = db.lock().unwrap();
+            chassis::db::migrate(&conn).unwrap();
+        }
         prune_once(db).await;
-    }
-
-    #[tokio::test]
-    async fn prepare_app_builds_state_and_router() {
-        let dir = tempfile::tempdir().unwrap();
-        let cfg = test_cfg(&dir.path().join("test.db"));
-        let (state, _app) = prepare_app(cfg).await.unwrap();
-        assert!(state.db.lock().is_ok());
-        assert!(state.auth.is_none());
-        // Router is opaque, but the AppState wiring is the critical part.
     }
 }

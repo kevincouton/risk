@@ -144,3 +144,55 @@ pub fn revoke_key(conn: &Connection, key_id: &str, user_id: &str) -> anyhow::Res
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn open_test_db() -> (tempfile::TempDir, Connection) {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test.db");
+        let conn = crate::db::open(path.to_str().unwrap()).unwrap();
+        crate::db::migrate(&conn).unwrap();
+        (dir, conn)
+    }
+
+    #[test]
+    fn list_keys_orders_newest_first_and_reflects_revoked() {
+        let (_d, conn) = open_test_db();
+        let uid = "user-1";
+        let kid1 = crate::db::new_id();
+        let kid2 = crate::db::new_id();
+        conn.execute(
+            "INSERT INTO api_keys (id, user_id, key_hash, label, created_at) VALUES (?, ?, ?, ?, datetime('now', '-2 minutes'))",
+            params![kid1, uid, "hash1", "first"],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO api_keys (id, user_id, key_hash, label, created_at) VALUES (?, ?, ?, ?, datetime('now'))",
+            params![kid2, uid, "hash2", "second"],
+        )
+        .unwrap();
+
+        let keys = list_keys(&conn, uid).unwrap();
+        assert_eq!(keys.len(), 2);
+        assert_eq!(keys[0].label, "second");
+        assert_eq!(keys[1].label, "first");
+        assert!(!keys[0].revoked);
+
+        conn.execute(
+            "UPDATE api_keys SET revoked_at = datetime('now') WHERE id = ?",
+            params![kid2],
+        )
+        .unwrap();
+        let keys = list_keys(&conn, uid).unwrap();
+        assert!(keys[0].revoked);
+    }
+
+    #[test]
+    fn list_keys_empty_user_returns_empty() {
+        let (_d, conn) = open_test_db();
+        let keys = list_keys(&conn, "no-such-user").unwrap();
+        assert!(keys.is_empty());
+    }
+}

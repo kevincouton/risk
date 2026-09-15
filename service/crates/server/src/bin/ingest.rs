@@ -32,62 +32,30 @@ fn usage() -> ! {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum Parsed {
-    List,
-    Run(String),
-    Usage,
+struct IngestArgs {
+    list: bool,
+    collector: Option<String>,
 }
 
-fn main() -> Result<()> {
-    tracing_subscriber::fmt()
-        .with_writer(std::io::stderr)
-        .init();
-
-    let parsed = parse_args(std::env::args().skip(1));
-    if parsed == Parsed::Usage {
-        usage();
-    }
-    run(registry(), parsed)
-}
-
-/// Parse the ingest CLI flags. Unknown flags, missing values, or no arguments
-/// all map to `Parsed::Usage` so `main` can exit with code 2.
-fn parse_args(mut args: impl Iterator<Item = String>) -> Parsed {
+fn parse_args(mut args: impl Iterator<Item = String>) -> Option<IngestArgs> {
     let mut list = false;
-    let mut name: Option<String> = None;
+    let mut collector = None;
     while let Some(a) = args.next() {
         match a.as_str() {
             "-list" | "--list" => list = true,
-            "-collector" | "--collector" => {
-                let Some(n) = args.next() else {
-                    return Parsed::Usage;
-                };
-                name = Some(n);
-            }
+            "-collector" | "--collector" => collector = Some(args.next()?),
             "-rate-limit" | "--rate-limit" | "-max-retries" | "--max-retries" | "-batch-size"
             | "--batch-size" => {
                 let _ = args.next();
                 eprintln!("ingest: warning: {a} is ignored by the Rust runtime");
             }
-            _ => return Parsed::Usage,
+            _ => return None,
         }
     }
-
-    if list {
-        return Parsed::List;
-    }
-    match name {
-        Some(n) => Parsed::Run(n),
-        None => Parsed::Usage,
-    }
+    Some(IngestArgs { list, collector })
 }
 
-/// Resolve a collector name against the registry. Errors (unknown name) are
-/// fatal and propagate as `Err` so the process exits non-zero.
-fn select_collectors(
-    all: Vec<Box<dyn Collector>>,
-    name: String,
-) -> Result<Vec<Box<dyn Collector>>> {
+fn select_by_name(all: Vec<Box<dyn Collector>>, name: String) -> Result<Vec<Box<dyn Collector>>> {
     let names: Vec<&'static str> = all.iter().map(|c| c.name()).collect();
     match all.into_iter().find(|c| c.name() == name) {
         Some(c) => Ok(vec![c]),
@@ -95,143 +63,163 @@ fn select_collectors(
     }
 }
 
-/// Run the selected action against the chassis database.
-fn run(all: Vec<Box<dyn Collector>>, parsed: Parsed) -> Result<()> {
-    match parsed {
-        Parsed::List => {
-            for c in &all {
-                println!("{}", c.name());
-            }
-            Ok(())
-        }
-        Parsed::Run(name) => {
-            let selected = select_collectors(all, name)?;
-            let cfg = Config::load();
-            let mut conn = db::open(&cfg.database_path).context("open db")?;
-            db::migrate(&conn).context("migrate")?;
-            run_all(&mut conn, selected)?;
-            println!("Ingest complete");
-            Ok(())
-        }
-        Parsed::Usage => usage(),
+fn list_collectors(all: &[Box<dyn Collector>]) {
+    for c in all {
+        println!("{}", c.name());
     }
+}
+
+fn run_selected(cfg: &Config, selected: Vec<Box<dyn Collector>>) -> Result<()> {
+    let mut conn = db::open(&cfg.database_path).context("open db")?;
+    db::migrate(&conn).context("migrate")?;
+    run_all(&mut conn, selected)?;
+    println!("Ingest complete");
+    Ok(())
+}
+
+fn dispatch_ingest(cfg: &Config, all: Vec<Box<dyn Collector>>, args: &IngestArgs) -> Result<()> {
+    if args.list {
+        list_collectors(&all);
+        return Ok(());
+    }
+    match &args.collector {
+        Some(name) => run_selected(cfg, select_by_name(all, name.clone())?),
+        None => usage(),
+    }
+}
+
+fn run(cfg: &Config, args: &IngestArgs) -> Result<()> {
+    dispatch_ingest(cfg, registry(), args)
+}
+
+fn main() -> Result<()> {
+    tracing_subscriber::fmt()
+        .with_writer(std::io::stderr)
+        .init();
+
+    let args = parse_args(std::env::args().skip(1)).unwrap_or_else(|| usage());
+    let cfg = Config::load();
+    run(&cfg, &args)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chassis::collectors::CollectedEntity;
+    use chassis::collectors::{CollectedEntity, Collector};
 
-    struct DummyCollector;
-
-    impl Collector for DummyCollector {
+    struct Dummy(&'static str);
+    impl Collector for Dummy {
         fn name(&self) -> &'static str {
-            "dummy"
+            self.0
         }
-
         fn fetch(&self) -> anyhow::Result<Vec<CollectedEntity>> {
             Ok(vec![])
         }
     }
 
-    fn dummy_registry() -> Vec<Box<dyn Collector>> {
-        vec![Box::new(DummyCollector)]
-    }
-
     #[test]
-    fn parse_args_list() {
+    fn parse_args_handles_all_flags() {
+        let args = parse_args(["-list"].into_iter().map(String::from));
         assert_eq!(
-            parse_args(["-list"].map(String::from).into_iter()),
-            Parsed::List
+            args,
+            Some(IngestArgs {
+                list: true,
+                collector: None
+            })
         );
-    }
 
-    #[test]
-    fn parse_args_collector() {
+        let args = parse_args(["--collector", "foo"].into_iter().map(String::from));
         assert_eq!(
-            parse_args(["-collector", "dummy"].map(String::from).into_iter()),
-            Parsed::Run("dummy".to_string())
+            args,
+            Some(IngestArgs {
+                list: false,
+                collector: Some("foo".into()),
+            })
         );
-    }
 
-    #[test]
-    fn parse_args_collector_double_dash() {
-        assert_eq!(
-            parse_args(["--collector", "dummy"].map(String::from).into_iter()),
-            Parsed::Run("dummy".to_string())
-        );
-    }
-
-    #[test]
-    fn parse_args_ignored_flags() {
-        assert_eq!(
-            parse_args(
-                [
-                    "-collector",
-                    "dummy",
-                    "-rate-limit",
-                    "10",
-                    "--max-retries",
-                    "3"
-                ]
-                .map(String::from)
+        let args = parse_args(
+            ["--rate-limit", "5", "--collector", "bar"]
                 .into_iter()
-            ),
-            Parsed::Run("dummy".to_string())
+                .map(String::from),
         );
-    }
-
-    #[test]
-    fn parse_args_no_args_is_usage() {
-        assert_eq!(parse_args(std::iter::empty()), Parsed::Usage);
-    }
-
-    #[test]
-    fn parse_args_unknown_flag_is_usage() {
         assert_eq!(
-            parse_args(["-foo"].map(String::from).into_iter()),
-            Parsed::Usage
+            args,
+            Some(IngestArgs {
+                list: false,
+                collector: Some("bar".into()),
+            })
         );
     }
 
     #[test]
-    fn parse_args_collector_without_value_is_usage() {
-        assert_eq!(
-            parse_args(["-collector"].map(String::from).into_iter()),
-            Parsed::Usage
-        );
+    fn parse_args_rejects_unknown_or_missing_collector() {
+        assert!(parse_args(["--unknown"].into_iter().map(String::from)).is_none());
+        assert!(parse_args(["--collector"].into_iter().map(String::from)).is_none());
     }
 
     #[test]
-    fn select_collectors_finds_match() {
-        let selected = select_collectors(dummy_registry(), "dummy".to_string()).unwrap();
-        assert_eq!(selected.len(), 1);
-        assert_eq!(selected[0].name(), "dummy");
-    }
-
-    #[test]
-    fn select_collectors_unknown_errors() {
-        let result = select_collectors(dummy_registry(), "missing".to_string());
-        match result {
-            Err(e) => {
-                let err = e.to_string();
-                assert!(err.contains("unknown collector"));
-                assert!(err.contains("dummy"));
+    fn select_by_name_finds_or_errors() {
+        let all: Vec<Box<dyn Collector>> = vec![Box::new(Dummy("a")), Box::new(Dummy("b"))];
+        match select_by_name(all, "a".into()) {
+            Ok(selected) => {
+                assert_eq!(selected.len(), 1);
+                assert_eq!(selected[0].name(), "a");
             }
-            Ok(_) => panic!("expected error"),
+            Err(_) => panic!("expected to find collector a"),
+        }
+
+        let all: Vec<Box<dyn Collector>> = vec![Box::new(Dummy("a")), Box::new(Dummy("b"))];
+        match select_by_name(all, "c".into()) {
+            Err(e) => assert!(e.to_string().contains("unknown collector")),
+            Ok(_) => panic!("expected unknown collector error"),
         }
     }
 
     #[test]
-    fn run_list_prints_names() {
-        // list returns Ok and does not touch the database.
-        run(dummy_registry(), Parsed::List).unwrap();
+    fn list_collectors_prints_names() {
+        let all: Vec<Box<dyn Collector>> = vec![Box::new(Dummy("a")), Box::new(Dummy("b"))];
+        list_collectors(&all);
     }
 
     #[test]
-    fn run_with_collector_succeeds() {
+    fn run_selected_ingests_empty() {
         let dir = tempfile::tempdir().unwrap();
-        std::env::set_var("DATABASE_PATH", dir.path().join("test.db"));
-        run(dummy_registry(), Parsed::Run("dummy".to_string())).unwrap();
+        let cfg = Config {
+            database_path: dir.path().join("test.db").to_string_lossy().into(),
+            ..Config::load()
+        };
+        let selected: Vec<Box<dyn Collector>> = vec![Box::new(Dummy("empty"))];
+        run_selected(&cfg, selected).unwrap();
+    }
+
+    #[test]
+    fn dispatch_ingest_lists_and_selects() {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = Config {
+            database_path: dir.path().join("test.db").to_string_lossy().into(),
+            ..Config::load()
+        };
+
+        let args = IngestArgs {
+            list: true,
+            collector: None,
+        };
+        dispatch_ingest(
+            &cfg,
+            vec![Box::new(Dummy("empty")) as Box<dyn Collector>],
+            &args,
+        )
+        .unwrap();
+
+        let args = IngestArgs {
+            list: false,
+            collector: Some("empty".into()),
+        };
+        dispatch_ingest(
+            &cfg,
+            vec![Box::new(Dummy("empty")) as Box<dyn Collector>],
+            &args,
+        )
+        .unwrap();
     }
 }
