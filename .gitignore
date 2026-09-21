@@ -1,1 +1,6 @@
 collectors/target/
+target/
+node_modules/
+.output/
+.nuxt/
+dist/
