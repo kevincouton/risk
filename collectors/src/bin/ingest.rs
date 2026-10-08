@@ -87,7 +87,7 @@ fn run(all: Vec<Box<dyn Collector>>, parsed: Parsed) -> Result<()> {
             for c in &all {
                 println!("{}", c.name());
             }
-            return Ok(());
+            Ok(())
         }
         Parsed::Usage => {
             let names: Vec<&'static str> = all.iter().map(|c| c.name()).collect();
