@@ -4,3 +4,7 @@ node_modules/
 .output/
 .nuxt/
 dist/
+web/dist
+.env
+.env.*
+!.env.example
