@@ -1,3 +1,5 @@
+import tailwindcss from '@tailwindcss/vite'
+
 export default defineNuxtConfig({
   app: {
     head: {
@@ -6,7 +8,6 @@ export default defineNuxtConfig({
     },
   },
   devtools: { enabled: false },
-  modules: ['@nuxtjs/tailwindcss'],
   runtimeConfig: {
     public: {
       apiUrl: process.env.NUXT_PUBLIC_API_URL || 'http://localhost:8080',
@@ -21,5 +22,9 @@ export default defineNuxtConfig({
     prerender: {
       routes: ['/', '/about'],
     },
+  },
+  css: ['~/assets/css/main.css'],
+  vite: {
+    plugins: [tailwindcss()],
   },
 })
