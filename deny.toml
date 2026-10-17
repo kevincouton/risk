@@ -50,23 +50,11 @@ allow = [
 [licenses.private]
 ignore = true
 
-# stdx git-pinned crates carry no license field in their manifests; license
-# texts live in the stdx repo (MIT-style: LICENSE.txt / LICENSE-MIT0).
-[[licenses.clarify]]
-crate = "base64@0.1.0"
-expression = "MIT"
-license-files = [{ path = "../LICENSE.txt", hash = 0x00000000 }]
-
-[[licenses.clarify]]
-crate = "constant_time_eq@0.1.0"
-expression = "MIT"
-license-files = [{ path = "LICENSE-MIT0", hash = 0x00000000 }]
-
 [sources]
 unknown-registry = "deny"
 unknown-git = "deny"
 allow-git = [
-  # Rev-pinned chassis deps, see AGENTS.md / service/SERVER_SHELL.md (tracked follow-up: vendor or upstream).
+  # topcoat is the only remaining git pin (tracked follow-up: vendor or
+  # upstream). The former stdx rev pins now come from crates.io.
   "https://github.com/tokio-rs/topcoat",
-  "https://github.com/rust-stdx/stdx",
 ]

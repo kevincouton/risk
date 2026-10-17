@@ -16,7 +16,7 @@ const WEBHOOK_TOLERANCE_SECS: i64 = 5 * 60; // Go: 5-minute tolerance, both dire
 
 /// webhook.go verifySignature: parse `t=<ts>,v1=<hex>` (comma-separated,
 /// multiple v1 allowed), HMAC-SHA256 over "{t}.{payload}", constant-time
-/// compare (stdx constant_time_eq crate), ±5-minute timestamp tolerance
+/// compare (constant_time_eq crate), ±5-minute timestamp tolerance
 /// (strictly greater rejects — exactly ±300s passes).
 pub fn verify_webhook_signature(secret: &str, payload: &[u8], stripe_signature: &str) -> bool {
     let mut ts: i64 = 0;

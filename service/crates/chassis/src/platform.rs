@@ -10,6 +10,7 @@
 //! client is used by collectors/scoring, never inside async handlers.
 
 use anyhow::{anyhow, Context, Result};
+use base64::Engine as _;
 
 /// Delta 4: hard ceiling on paginated fetch loops.
 pub const MAX_PAGES: u32 = 100;
@@ -117,7 +118,8 @@ impl PlatformClient {
             .and_then(|c| c.as_str())
             .ok_or_else(|| anyhow!("readme response for {owner}/{name} has no content field"))?;
         let compact: String = content.chars().filter(|c| !c.is_whitespace()).collect();
-        let bytes = base64::decode(compact.as_bytes(), base64::Alphabet::Standard)
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(compact.as_bytes())
             .context("decode readme base64")?;
         String::from_utf8(bytes).context("readme is not valid UTF-8")
     }

@@ -15,9 +15,9 @@ ignore = [
 [bans]
 multiple-versions = "warn"
 wildcards = "warn"
-# Git-sourced deps (topcoat, stdx rev pins — see SERVER_SHELL.md R-0) are a
-# known, tracked exception to the crates.io-only rule; do not deny git sources
-# here until the vendoring/publishing follow-up lands.
+# Git-sourced topcoat (see SERVER_SHELL.md R-0) is a known, tracked exception
+# to the crates.io-only rule; do not deny git sources here until the
+# vendoring/publishing follow-up lands.
 highlight = "all"
 
 [licenses]
@@ -40,22 +40,13 @@ allow = [
 # Workspace crates (chassis, server) are not published anywhere.
 private = { ignore = true }
 
-# rust-stdx/stdx's base64 crate carries no license metadata; the stdx repo is
-# MIT-licensed (https://github.com/rust-stdx/stdx). This is the git-pinned stdx
-# base64 0.1.0, not the crates.io base64.
-[[licenses.clarify]]
-name = "base64"
-version = "0.1.0"
-expression = "MIT"
-license-files = [{ path = "../LICENSE.txt", hash = 0x15504f92 }]
-
 [sources]
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+# Only topcoat remains git-pinned (R-0, service/SERVER_SHELL.md) — a tracked
+# exception to the crates.io-only rule until the vendoring/publishing
+# follow-up lands. The former stdx rev pins now come from crates.io.
 allow-git = [
-    # Rev-pinned chassis deps (R-0, service/SERVER_SHELL.md); tracked follow-up
-    # to vendor or publish upstream.
     "https://github.com/tokio-rs/topcoat",
-    "https://github.com/rust-stdx/stdx",
 ]
 unknown-registry = "deny"
 unknown-git = "deny"

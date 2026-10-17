@@ -15,6 +15,7 @@
 use std::future::Future;
 use std::pin::Pin;
 
+use base64::Engine as _;
 use hmac::{Hmac, Mac};
 use rusqlite::params;
 use sha2::Sha256;
@@ -69,8 +70,8 @@ pub fn sign_session(key: &[u8], payload: &str) -> String {
     mac.update(payload.as_bytes());
     format!(
         "{}.{}",
-        base64::encode(payload.as_bytes(), base64::Alphabet::UrlNoPadding),
-        base64::encode(mac.finalize().into_bytes(), base64::Alphabet::UrlNoPadding)
+        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(payload.as_bytes()),
+        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(mac.finalize().into_bytes())
     )
 }
 
@@ -79,7 +80,9 @@ pub fn sign_session(key: &[u8], payload: &str) -> String {
 /// payload JSON; expiry is checked by the caller (current_user), as in Go.
 pub fn verify_session(key: &[u8], signed: &str) -> Option<String> {
     let (b64_payload, sig) = signed.split_once('.')?;
-    let raw = base64::decode(b64_payload, base64::Alphabet::UrlNoPadding).ok()?;
+    let raw = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(b64_payload)
+        .ok()?;
     let payload = String::from_utf8(raw).ok()?;
     let want = sign_session(key, &payload);
     let (_, want_sig) = want.split_once('.')?;
@@ -319,6 +322,7 @@ mod oidc {
     use std::future::Future;
     use std::pin::Pin;
 
+    use base64::Engine as _;
     use openidconnect::core::{
         CoreAuthDisplay, CoreAuthPrompt, CoreErrorResponseType, CoreGenderClaim, CoreJsonWebKey,
         CoreJweContentEncryptionAlgorithm, CoreJwsSigningAlgorithm, CoreProviderMetadata,
@@ -472,7 +476,7 @@ mod oidc {
             // Go oidc.go randomState: 16 random bytes → base64.RawURLEncoding (22 chars, dot-free).
             let mut b = [0u8; 16];
             rand::rng().fill_bytes(&mut b);
-            let state = base64::encode(b, base64::Alphabet::UrlNoPadding);
+            let state = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(b);
             // Go oauth2.AuthCodeURL: endpoint + "?" + url.Values.Encode() — keys
             // sorted alphabetically, NO nonce param (go-oidc flow). openidconnect's
             // authorize_url() would append `nonce` and its own key order, which

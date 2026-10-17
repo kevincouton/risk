@@ -153,11 +153,6 @@ checksum = "4c7f02d4ea65f2c1853089ffd8d2787bdbc63de2f0d29dedbcf8ccdfa0ccd4cf"
 
 [[package]]
 name = "base64"
-version = "0.1.0"
-source = "git+https://github.com/rust-stdx/stdx?rev=c83000f05a084527033e8b884fb21ea07de80ab8#c83000f05a084527033e8b884fb21ea07de80ab8"
-
-[[package]]
-name = "base64"
 version = "0.21.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9d297deb1925b89f2ccc13d7635fa0714f12c87adce1c75356b39ca9b7178567"
@@ -313,7 +308,7 @@ name = "chassis"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "base64 0.1.0",
+ "base64 0.22.1",
  "constant_time_eq",
  "dotenvy",
  "hex",
@@ -395,8 +390,9 @@ checksum = "a6ef517f0926dd24a1582492c791b6a4818a4d94e789a334894aa15b0d12f55c"
 
 [[package]]
 name = "constant_time_eq"
-version = "0.3.0"
-source = "git+https://github.com/rust-stdx/stdx?rev=c83000f05a084527033e8b884fb21ea07de80ab8#c83000f05a084527033e8b884fb21ea07de80ab8"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c74b8349d32d297c9134b8c88677813a227df8f779daa29bfc29c183fe3dca6"
 
 [[package]]
 name = "cookie"
