@@ -16,7 +16,7 @@ use std::future::Future;
 use std::pin::Pin;
 
 use base64::Engine as _;
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use rusqlite::params;
 use sha2::Sha256;
 
@@ -319,10 +319,10 @@ impl AuthProvider {
 
 mod oidc {
     use super::{OidcFlow, TokenClaims};
+    use base64::Engine as _;
     use std::future::Future;
     use std::pin::Pin;
 
-    use base64::Engine as _;
     use openidconnect::core::{
         CoreAuthDisplay, CoreAuthPrompt, CoreErrorResponseType, CoreGenderClaim, CoreJsonWebKey,
         CoreJweContentEncryptionAlgorithm, CoreJwsSigningAlgorithm, CoreProviderMetadata,
@@ -334,7 +334,7 @@ mod oidc {
         EndpointMaybeSet, EndpointNotSet, EndpointSet, IdTokenFields, IssuerUrl, Nonce,
         RedirectUrl, StandardErrorResponse, StandardTokenResponse,
     };
-    use rand::RngCore as _;
+    use rand::Rng as _;
 
     /// Extra claim we keep beyond the standard set: `groups` (Authentik).
     /// email/name are STANDARD claims — read via claims.email()/claims.name().

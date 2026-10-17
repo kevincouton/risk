@@ -1,7 +1,7 @@
 //! Ports of go-service/internal/billing/billing_test.go (7 tests) plus the
 //! delta-6 test (deleted-unknown-subscription → 200 {"ignored":true}).
 
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use sha2::Sha256;
 
 use chassis::billing;

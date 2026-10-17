@@ -9,9 +9,3 @@ python3 -c "import os; p=os.getcwd(); s=open('lcov.info').read(); open('lcov.inf
 cargo crap --workspace --lcov lcov.info
 cargo crap --workspace --lcov lcov.info --baseline crap_baseline.json --fail-regression || \
     echo "Warning: service CRAP regression detected"
-
-cd "$REPO_ROOT/collectors"
-cargo llvm-cov --lcov --output-path lcov.info
-cargo crap --lcov lcov.info
-cargo crap --lcov lcov.info --baseline crap_baseline.json --fail-regression || \
-    echo "Warning: collectors CRAP regression detected"

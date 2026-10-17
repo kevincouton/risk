@@ -15,9 +15,9 @@ ignore = [
 [bans]
 multiple-versions = "warn"
 wildcards = "warn"
-# Git-sourced topcoat (see SERVER_SHELL.md R-0) is a known, tracked exception
-# to the crates.io-only rule; do not deny git sources here until the
-# vendoring/publishing follow-up lands.
+# The topcoat rev pin (see [sources] below) is the single tracked exception to
+# the crates.io-only rule; do not add further git sources without a documented
+# exception in SECURITY.md.
 highlight = "all"
 
 [licenses]
@@ -42,10 +42,13 @@ private = { ignore = true }
 
 [sources]
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
-# Only topcoat remains git-pinned (R-0, service/SERVER_SHELL.md) — a tracked
-# exception to the crates.io-only rule until the vendoring/publishing
-# follow-up lands. The former stdx rev pins now come from crates.io.
 allow-git = [
+    # Policy exception (see SECURITY.md "Dependency policy"): topcoat is the
+    # workspace web framework, rev-pinned for reproducibility
+    # (rev 371c7403 = v0.5.0, service/SERVER_SHELL.md R-0). topcoat was not on
+    # crates.io when the pin was set; it is now published (0.10.x), so the
+    # registry migration / version upgrade is tracked follow-up work. No other
+    # git sources are permitted.
     "https://github.com/tokio-rs/topcoat",
 ]
 unknown-registry = "deny"

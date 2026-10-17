@@ -7,22 +7,22 @@ publish = false
 [dependencies]
 anyhow = "1"
 base64 = "0.22"
-constant_time_eq = "0.3"
+constant_time_eq = "0.6"
 dotenvy = "0.15"
 hex = "0.4"
-hmac = "0.12"
+hmac = "0.13"
 openidconnect = "=4.0.1" # oauth2 5 re-exports reqwest 0.12; its Client implements AsyncHttpClient
-rand = "0.9"
+rand = "0.10"
 # reqwest 0.12 matches openidconnect 4.0.1's oauth2 5 re-export (single reqwest
 # in the tree; R-3 coordination note). rustls-tls here also covers the
 # openidconnect::reqwest re-export, which oauth2 pulls with no TLS feature.
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls", "json"] }
-rusqlite = { version = "0.32", features = ["bundled"] }
+rusqlite = { version = "0.40", features = ["bundled"] }
 sentry.workspace = true
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_urlencoded = "0.7"
-sha2 = "0.10"
+sha2 = "0.11"
 time = { version = "0.3", features = ["macros", "parsing", "formatting"] }
 tokio = { version = "1", features = ["rt", "time"] } # analytics fire-and-forget spawn (server runtime)
 tracing = "0.1"

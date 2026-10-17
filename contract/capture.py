@@ -102,7 +102,7 @@ class OidcStub:
                         "userinfo_endpoint": issuer + "/userinfo",
                         "jwks_uri": issuer + "/jwks",
                         # Mandatory OpenID Provider Metadata fields. go-oidc
-                        # ignores them, but openidconnect 3.5 (Rust chassis)
+                        # ignores them, but openidconnect (Rust chassis)
                         # refuses to parse the metadata document without them.
                         "response_types_supported": ["code"],
                         "subject_types_supported": ["public"],
@@ -115,7 +115,7 @@ class OidcStub:
                     self.end_headers()
                     self.wfile.write(data)
                 elif self.path == "/jwks":
-                    # openidconnect 3.5 (Rust chassis) fetches jwks_uri eagerly
+                    # openidconnect (Rust chassis) fetches jwks_uri eagerly
                     # during discovery; go-oidc fetches lazily, so the Go server
                     # never hits this. An empty key set suffices: no fixture
                     # verifies tokens (the callback path is not capturable

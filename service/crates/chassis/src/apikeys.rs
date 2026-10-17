@@ -4,7 +4,7 @@
 //! and window-count + usage-insert happen in ONE SQLite transaction
 //! (fail-closed: insert errors propagate as Err → HTTP 500).
 
-use rand::RngCore as _;
+use rand::Rng as _;
 use rusqlite::{params, Connection};
 use sha2::{Digest, Sha256};
 

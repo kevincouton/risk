@@ -2,7 +2,7 @@
 //! stdlib-style HTTP, NO Stripe SDK. delta 6: deleted-unknown-subscription →
 //! 200 {"ignored":true}. delta 14: typed serde form for checkout (no string concat).
 
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use rusqlite::params;
 use sha2::Sha256;
 
@@ -16,7 +16,7 @@ const WEBHOOK_TOLERANCE_SECS: i64 = 5 * 60; // Go: 5-minute tolerance, both dire
 
 /// webhook.go verifySignature: parse `t=<ts>,v1=<hex>` (comma-separated,
 /// multiple v1 allowed), HMAC-SHA256 over "{t}.{payload}", constant-time
-/// compare (constant_time_eq crate), ±5-minute timestamp tolerance
+/// compare (stdx constant_time_eq crate), ±5-minute timestamp tolerance
 /// (strictly greater rejects — exactly ±300s passes).
 pub fn verify_webhook_signature(secret: &str, payload: &[u8], stripe_signature: &str) -> bool {
     let mut ts: i64 = 0;

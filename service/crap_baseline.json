@@ -93,7 +93,7 @@
     {
       "file": "crates/chassis/src/auth.rs",
       "function": "AuthProvider::callback",
-      "line": 214,
+      "line": 217,
       "cyclomatic": 5.0,
       "coverage": 100.0,
       "crap": 5.0
@@ -101,7 +101,7 @@
     {
       "file": "crates/chassis/src/auth.rs",
       "function": "AuthProvider::current_user",
-      "line": 273,
+      "line": 276,
       "cyclomatic": 5.0,
       "coverage": 100.0,
       "crap": 5.0
@@ -109,7 +109,7 @@
     {
       "file": "crates/chassis/src/auth.rs",
       "function": "AuthProvider::discover",
-      "line": 177,
+      "line": 180,
       "cyclomatic": 2.0,
       "coverage": 0.0,
       "crap": 6.0
@@ -117,7 +117,7 @@
     {
       "file": "crates/chassis/src/auth.rs",
       "function": "AuthProvider::login",
-      "line": 202,
+      "line": 205,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0
@@ -125,7 +125,7 @@
     {
       "file": "crates/chassis/src/auth.rs",
       "function": "AuthProvider::new_for_test",
-      "line": 191,
+      "line": 194,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0
@@ -133,7 +133,7 @@
     {
       "file": "crates/chassis/src/auth.rs",
       "function": "AuthProvider::require_group",
-      "line": 303,
+      "line": 306,
       "cyclomatic": 5.0,
       "coverage": 90.0,
       "crap": 5.025
@@ -141,7 +141,7 @@
     {
       "file": "crates/chassis/src/auth.rs",
       "function": "AuthProvider::upsert_user",
-      "line": 237,
+      "line": 240,
       "cyclomatic": 5.0,
       "coverage": 96.7741935483871,
       "crap": 5.000839179618006
@@ -149,7 +149,7 @@
     {
       "file": "crates/chassis/src/auth.rs",
       "function": "CallbackError::fmt",
-      "line": 148,
+      "line": 151,
       "cyclomatic": 4.0,
       "coverage": 100.0,
       "crap": 4.0
@@ -157,7 +157,7 @@
     {
       "file": "crates/chassis/src/auth.rs",
       "function": "RealFlow::authorize",
-      "line": 471,
+      "line": 475,
       "cyclomatic": 1.0,
       "coverage": 0.0,
       "crap": 2.0
@@ -165,7 +165,7 @@
     {
       "file": "crates/chassis/src/auth.rs",
       "function": "RealFlow::discover",
-      "line": 417,
+      "line": 421,
       "cyclomatic": 3.0,
       "coverage": 0.0,
       "crap": 12.0
@@ -173,7 +173,7 @@
     {
       "file": "crates/chassis/src/auth.rs",
       "function": "RealFlow::exchange",
-      "line": 491,
+      "line": 495,
       "cyclomatic": 3.0,
       "coverage": 0.0,
       "crap": 12.0
@@ -181,7 +181,7 @@
     {
       "file": "crates/chassis/src/auth.rs",
       "function": "RealFlow::from_metadata",
-      "line": 395,
+      "line": 399,
       "cyclomatic": 2.0,
       "coverage": 0.0,
       "crap": 6.0
@@ -189,7 +189,7 @@
     {
       "file": "crates/chassis/src/auth.rs",
       "function": "RealFlow::parse_token_response",
-      "line": 424,
+      "line": 428,
       "cyclomatic": 3.0,
       "coverage": 0.0,
       "crap": 12.0
@@ -197,7 +197,7 @@
     {
       "file": "crates/chassis/src/auth.rs",
       "function": "build_http_client",
-      "line": 387,
+      "line": 391,
       "cyclomatic": 1.0,
       "coverage": 0.0,
       "crap": 2.0
@@ -205,7 +205,7 @@
     {
       "file": "crates/chassis/src/auth.rs",
       "function": "clear_session_cookie",
-      "line": 120,
+      "line": 123,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0
@@ -213,7 +213,7 @@
     {
       "file": "crates/chassis/src/auth.rs",
       "function": "query_escape",
-      "line": 456,
+      "line": 460,
       "cyclomatic": 5.0,
       "coverage": 100.0,
       "crap": 5.0
@@ -221,7 +221,7 @@
     {
       "file": "crates/chassis/src/auth.rs",
       "function": "session_cookie_for",
-      "line": 95,
+      "line": 98,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0
@@ -229,7 +229,7 @@
     {
       "file": "crates/chassis/src/auth.rs",
       "function": "session_cookie_with_exp",
-      "line": 102,
+      "line": 105,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0
@@ -237,7 +237,7 @@
     {
       "file": "crates/chassis/src/auth.rs",
       "function": "sign_session",
-      "line": 67,
+      "line": 68,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0
@@ -245,7 +245,7 @@
     {
       "file": "crates/chassis/src/auth.rs",
       "function": "verify_session",
-      "line": 80,
+      "line": 81,
       "cyclomatic": 6.0,
       "coverage": 100.0,
       "crap": 6.0
@@ -429,7 +429,7 @@
     {
       "file": "crates/chassis/src/config.rs",
       "function": "Config::load",
-      "line": 42,
+      "line": 43,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0
@@ -437,7 +437,7 @@
     {
       "file": "crates/chassis/src/config.rs",
       "function": "env_flag",
-      "line": 79,
+      "line": 81,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0
@@ -445,7 +445,7 @@
     {
       "file": "crates/chassis/src/config.rs",
       "function": "env_or",
-      "line": 71,
+      "line": 73,
       "cyclomatic": 3.0,
       "coverage": 100.0,
       "crap": 3.0
@@ -523,9 +523,17 @@
       "crap": 7.0
     },
     {
+      "file": "crates/chassis/src/observability.rs",
+      "function": "init",
+      "line": 11,
+      "cyclomatic": 4.0,
+      "coverage": 65.0,
+      "crap": 4.686
+    },
+    {
       "file": "crates/chassis/src/platform.rs",
       "function": "PlatformClient::get",
-      "line": 50,
+      "line": 51,
       "cyclomatic": 4.0,
       "coverage": 100.0,
       "crap": 4.0
@@ -533,7 +541,7 @@
     {
       "file": "crates/chassis/src/platform.rs",
       "function": "PlatformClient::get_json",
-      "line": 67,
+      "line": 68,
       "cyclomatic": 2.0,
       "coverage": 100.0,
       "crap": 2.0
@@ -541,7 +549,7 @@
     {
       "file": "crates/chassis/src/platform.rs",
       "function": "PlatformClient::get_paginated",
-      "line": 78,
+      "line": 79,
       "cyclomatic": 7.0,
       "coverage": 100.0,
       "crap": 7.0
@@ -549,7 +557,7 @@
     {
       "file": "crates/chassis/src/platform.rs",
       "function": "PlatformClient::get_readme",
-      "line": 113,
+      "line": 114,
       "cyclomatic": 4.0,
       "coverage": 100.0,
       "crap": 4.0
@@ -557,7 +565,7 @@
     {
       "file": "crates/chassis/src/platform.rs",
       "function": "PlatformClient::get_readme",
-      "line": 127,
+      "line": 129,
       "cyclomatic": 1.0,
       "coverage": 0.0,
       "crap": 2.0
@@ -565,7 +573,7 @@
     {
       "file": "crates/chassis/src/platform.rs",
       "function": "PlatformClient::new",
-      "line": 28,
+      "line": 29,
       "cyclomatic": 1.0,
       "coverage": 0.0,
       "crap": 2.0
@@ -573,7 +581,7 @@
     {
       "file": "crates/chassis/src/platform.rs",
       "function": "PlatformClient::with_base_url",
-      "line": 33,
+      "line": 34,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0
@@ -581,7 +589,7 @@
     {
       "file": "crates/chassis/src/platform.rs",
       "function": "parse_next_link",
-      "line": 133,
+      "line": 135,
       "cyclomatic": 4.0,
       "coverage": 80.0,
       "crap": 4.128
@@ -789,7 +797,7 @@
     {
       "file": "crates/server/src/bin/server.rs",
       "function": "handle",
-      "line": 131,
+      "line": 145,
       "cyclomatic": 3.0,
       "coverage": 0.0,
       "crap": 12.0
@@ -814,14 +822,14 @@
       "file": "crates/server/src/bin/server.rs",
       "function": "main",
       "line": 117,
-      "cyclomatic": 2.0,
+      "cyclomatic": 3.0,
       "coverage": 0.0,
-      "crap": 6.0
+      "crap": 12.0
     },
     {
       "file": "crates/server/src/bin/server.rs",
       "function": "map_response",
-      "line": 169,
+      "line": 183,
       "cyclomatic": 2.0,
       "coverage": 0.0,
       "crap": 6.0
@@ -1212,9 +1220,9 @@
     }
   ],
   "diagnostics": {
-    "analyzed_files": 16,
-    "lcov_files": 16,
-    "matched_files": 16,
+    "analyzed_files": 17,
+    "lcov_files": 17,
+    "matched_files": 17,
     "source_only": {
       "count": 0,
       "examples": []

@@ -31,3 +31,21 @@ pub fn init(dsn: &str, release: Option<String>) -> Option<sentry::ClientInitGuar
     options.traces_sampling_strategy = sentry::TracesSamplingStrategy::FixedRate(1.0);
     Some(sentry::init(options))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn init_empty_dsn_returns_none() {
+        assert!(init("", None).is_none(), "empty DSN disables capture");
+    }
+
+    #[test]
+    fn init_invalid_dsn_returns_none() {
+        assert!(
+            init("not a dsn", None).is_none(),
+            "invalid DSN disables capture"
+        );
+    }
+}

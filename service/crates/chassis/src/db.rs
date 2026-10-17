@@ -152,7 +152,7 @@ fn column_exists(conn: &Connection, table: &str, column: &str) -> Result<bool> {
 
 /// Random UUID v4 (port of Go NewID, crypto/rand → rand crate).
 pub fn new_id() -> String {
-    use rand::RngCore;
+    use rand::Rng;
     let mut b = [0u8; 16];
     rand::rng().fill_bytes(&mut b);
     b[6] = (b[6] & 0x0f) | 0x40;
