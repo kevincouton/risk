@@ -7,3 +7,6 @@ members = ["crates/chassis", "crates/server"]
 # for TowerRoute (SERVER_SHELL.md static-mount idiom).
 topcoat = { git = "https://github.com/tokio-rs/topcoat", rev = "371c7403fcbf4d40bbacb2f87eb98d9ce00e76c8", features = ["tower"] }
 tower = { version = "0.5", features = ["util"] }
+# Sentry error capture: reqwest+rustls transport (matches chassis reqwest TLS),
+# tracing layer, panic capture. Inert unless SENTRY_DSN is set.
+sentry = { version = "0.49", default-features = false, features = ["reqwest", "rustls", "tracing", "panic", "contexts", "backtrace"] }

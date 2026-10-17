@@ -99,6 +99,10 @@ fn main() -> Result<()> {
 
     let args = parse_args(std::env::args().skip(1)).unwrap_or_else(|| usage());
     let cfg = Config::load();
+    let _sentry = chassis::observability::init(
+        &cfg.sentry_dsn,
+        Some(concat!("risk-ingest@", env!("CARGO_PKG_VERSION")).to_string()),
+    );
     run(&cfg, &args)
 }
 

@@ -261,6 +261,7 @@ fn test_cfg() -> chassis::config::Config {
         database_path: String::new(),
         api_port: 8080,
         posthog_api_key: String::new(),
+        sentry_dsn: String::new(),
         ga_id: String::new(),
         ads_id: String::new(),
         auth_enabled: false,

@@ -7,5 +7,6 @@ pub mod billing;
 pub mod collectors;
 pub mod config;
 pub mod db;
+pub mod observability;
 pub mod platform;
 pub mod scoring;

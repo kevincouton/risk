@@ -961,6 +961,7 @@ mod tests {
             database_path: "./test.db".into(),
             api_port: 8080,
             posthog_api_key: "".into(),
+            sentry_dsn: "".into(),
             ga_id: "".into(),
             ads_id: "".into(),
             auth_enabled: false,

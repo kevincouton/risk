@@ -115,8 +115,22 @@ async fn run_server(cfg: &chassis::config::Config, app: Router) -> anyhow::Resul
 #[tokio::main]
 #[cfg_attr(feature = "hotpath", hotpath::main)]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt::init();
     let cfg = chassis::config::Config::load();
+    let _sentry = chassis::observability::init(
+        &cfg.sentry_dsn,
+        Some(concat!("risk-server@", env!("CARGO_PKG_VERSION")).to_string()),
+    );
+    // With Sentry enabled, forward ERROR-level tracing events (and sampled
+    // spans) to Sentry; without it, keep the plain fmt subscriber.
+    use tracing_subscriber::prelude::*;
+    if _sentry.is_some() {
+        tracing_subscriber::fmt()
+            .finish()
+            .with(sentry::integrations::tracing::layer())
+            .init();
+    } else {
+        tracing_subscriber::fmt().init();
+    }
     let db = init_db(&cfg)?;
     chassis::analytics::init(&cfg.posthog_api_key);
     start_prune_task(db.clone());
@@ -186,6 +200,7 @@ mod tests {
             database_path: db_path.to_string_lossy().into(),
             api_port: 0,
             posthog_api_key: "".into(),
+            sentry_dsn: "".into(),
             ga_id: "".into(),
             ads_id: "".into(),
             auth_enabled: false,

@@ -97,6 +97,10 @@ fn main() -> Result<()> {
         .init();
 
     let cfg = Config::load();
+    let _sentry = chassis::observability::init(
+        &cfg.sentry_dsn,
+        Some(concat!("risk-score@", env!("CARGO_PKG_VERSION")).to_string()),
+    );
     let args: Vec<String> = std::env::args().skip(1).collect();
     run(&cfg, &args)
 }

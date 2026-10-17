@@ -7,6 +7,8 @@ Type=simple
 ExecStart=/usr/local/bin/risk-server
 WorkingDirectory=/root/risk
 Environment=DATABASE_PATH=/var/lib/risk/risk.db
+# Optional env file on the host (SENTRY_DSN, SENTRY_RELEASE, POSTHOG_API_KEY, ...).
+EnvironmentFile=-/etc/risk/env
 Restart=on-failure
 RestartSec=3
 

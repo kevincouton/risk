@@ -32,6 +32,7 @@ rusqlite = { version = "0.32", features = ["bundled"] } # same version as chassi
 tracing = "0.1"
 tracing-subscriber = "0.3"
 url = "2" # query-pair decoding (Go r.URL.Query semantics)
+sentry.workspace = true
 hotpath = { version = "0.23", optional = true }
 
 [features]
