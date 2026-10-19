@@ -21,7 +21,7 @@
     "d3": "^7.9.0",
     "nuxt": "^4.4.7",
     "ofetch": "1.5.1",
-    "posthog-js": "^1.382.0",
+    "posthog-js": "^1.438.7",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
     "vitest": "^5.0.5",
