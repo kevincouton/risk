@@ -8,13 +8,11 @@ export default defineNuxtPlugin(() => {
 
   let client: PostHog | null = null
 
-  const getClient = (): PostHog | null => {
-    if (!key) return null
-    if (!client) {
-      client = posthog.init(key, { api_host: host }) ?? null
-    }
-    return client
+  if (key) {
+    client = posthog.init(key, { api_host: host }) ?? null
   }
+
+  const getClient = (): PostHog | null => client
 
   return {
     provide: { posthog: getClient },
