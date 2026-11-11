@@ -1,0 +1,8 @@
+# House standard: Google Rust Style Guide, stable-compatible subset.
+# https://google.github.io/styleguide/rustguide.html
+# Nightly-only guide options deliberately not set; see RUST_STYLE.md.
+edition = "2021"
+max_width = 100
+reorder_modules = true
+use_field_init_shorthand = true
+use_try_shorthand = true

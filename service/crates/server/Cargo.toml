@@ -43,3 +43,6 @@ hotpath = ["dep:hotpath", "hotpath/hotpath"]
 tempfile = "3"
 httptest = "0.16"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "blocking", "json"] }
+
+[lints]
+workspace = true

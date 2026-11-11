@@ -1,5 +1,7 @@
 # Risk — Agent Guide
 
+Rust style: see [RUST_STYLE.md](RUST_STYLE.md) (Google Rust Style Guide house standard).
+
 ## Project
 Risk scores open-source dependencies on release trajectory, maintenance signals, and documentation quality, producing green/yellow/red/critical verdicts.
 

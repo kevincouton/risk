@@ -2,6 +2,14 @@
 resolver = "2"
 members = ["crates/chassis", "crates/server"]
 
+[workspace.lints.clippy]
+# Google Rust Style Guide-aligned lints (see RUST_STYLE.md).
+wildcard_imports = "warn"
+uninlined_format_args = "warn"
+implicit_clone = "warn"
+redundant_field_names = "warn"
+ptr_arg = "warn"
+
 [workspace.dependencies]
 # topcoat rev pinned by R-0 (service/SERVER_SHELL.md); `tower` feature required
 # for TowerRoute (SERVER_SHELL.md static-mount idiom).
