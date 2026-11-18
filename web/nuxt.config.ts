@@ -18,6 +18,7 @@ export default defineNuxtConfig({
       adsenseClientId: process.env.NUXT_PUBLIC_ADSENSE_CLIENT_ID || '',
       posthogKey: process.env.NUXT_PUBLIC_POSTHOG_KEY || '',
       posthogHost: process.env.NUXT_PUBLIC_POSTHOG_HOST || 'https://eu.posthog.com',
+      umamiWebsiteId: process.env.NUXT_PUBLIC_UMAMI_WEBSITE_ID || '',
     },
   },
   nitro: {

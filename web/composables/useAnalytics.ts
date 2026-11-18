@@ -12,6 +12,11 @@ export const useAnalytics = () => {
     } catch {
       /* silent fail */
     }
+    try {
+      ;(window as any).umami?.track(event, properties)
+    } catch {
+      /* silent fail */
+    }
   }
 
   const trackEntityClick = (entity: {
