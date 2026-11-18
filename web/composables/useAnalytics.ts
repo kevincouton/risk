@@ -1,12 +1,7 @@
 export const useAnalytics = () => {
-  const { $posthog, $gtag } = useNuxtApp()
+  const { $gtag } = useNuxtApp()
 
   const track = (event: string, properties?: Record<string, any>) => {
-    try {
-      $posthog?.().capture(event, properties)
-    } catch {
-      /* silent fail */
-    }
     try {
       $gtag?.('event', event, properties)
     } catch {
