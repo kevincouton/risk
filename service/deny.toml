@@ -16,6 +16,10 @@ ignore = [
     # build against — same no-upstream-fix situation as rsa above. Verified via
     # `cargo tree -i crypto-bigint`.
     "RUSTSEC-2026-0387",
+    # chrono 0.4.45: informational "unmaintained" advisory (2026-09-14), no
+    # patched version exists; the recommended replacements (jiff/time) are a
+    # fleet-wide migration round, tracked separately. No known vulnerability.
+    "RUSTSEC-2026-0543",
 ]
 
 [bans]
