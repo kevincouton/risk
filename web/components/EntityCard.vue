@@ -6,7 +6,7 @@
     <NuxtLink :to="`/${entity.full_name}`" class="block">
       <div class="flex items-start justify-between mb-3">
         <h3
-          class="font-semibold text-lg leading-tight group-hover:text-blue-700 transition-colors dark:text-gray-100"
+          class="font-semibold text-lg leading-tight group-hover:text-blue-700 transition-colors dark:text-gray-100 break-all min-w-0"
         >
           {{ entity.full_name }}
         </h3>

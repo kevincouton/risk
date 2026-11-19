@@ -14,6 +14,36 @@
 </template>
 
 <script setup>
+useSeo({
+  title: 'Risk — Scored open-source dependency directory',
+  description:
+    'Risk scores open-source dependencies on release trajectory, maintenance signals, and documentation quality — a composite 0-100 score with a green/yellow/red/critical verdict for every package.',
+  keywords: [
+    'dependency health',
+    'open source risk',
+    'maintenance signals',
+    'dependency scoring',
+    'supply chain',
+    'Risk',
+  ],
+})
+
+useHead({
+  script: [
+    {
+      type: 'application/ld+json',
+      innerHTML: JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'WebSite',
+        name: 'Risk',
+        url: 'https://risk.lucanian.app',
+        description:
+          'Scores open-source dependencies on release trajectory, maintenance signals, and documentation quality.',
+      }),
+    },
+  ],
+})
+
 const { getEntities } = useApi()
 
 const { data, pending, error } = await useAsyncData('entities', () => getEntities({ limit: '50' }))

@@ -1,0 +1,37 @@
+# Risk
+
+> Risk scores open-source dependencies on release trajectory, maintenance
+> signals, and documentation quality, producing green/yellow/red/critical
+> verdicts at risk.lucanian.app.
+
+## Overview
+
+Risk tracks open-source dependencies and scores them with a multi-dimensional
+methodology: release trajectory, maintenance signals, and documentation
+quality. Every dependency gets a composite score from 0-100 and a
+green/yellow/red/critical verdict, so teams can spot at-risk dependencies
+before they hurt. The platform is built with a Rust backend API and a Nuxt 4
+frontend.
+
+## Key Features
+
+- Scored dependency directory with composite 0-100 scores
+- Green/yellow/red/critical verdict per dependency
+- Methodology-driven ranking (trajectory, maintenance, docs)
+- Search across the directory
+- Dark/light mode support
+- Mobile-responsive design
+
+## API Endpoints
+
+- `GET /healthz` — Health check
+- `GET /api/v1/entities?limit=50` — List entities
+- `GET /api/v1/entities/:owner/:name?platform=github` — Entity detail
+- `GET /api/v1/search?q=query` — Search entities
+- `GET /api/v1/stats` — Platform statistics
+
+## Pages
+
+- `/` — The scored dependency directory
+- `/about` — About the platform and methodology
+- `/sitemap.xml` — XML sitemap for crawlers
